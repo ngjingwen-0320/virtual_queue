@@ -20,12 +20,25 @@ class AuthService {
       final user = result.user;
       if (user == null) return null;
 
-      final doc = await _db.collection('users').doc(user.uid).get();
+      await user.reload();
+      final updatedUser = _auth.currentUser;
+
+      if (updatedUser == null || !updatedUser.emailVerified) {
+        await _auth.signOut();
+        throw FirebaseAuthException(
+          code: 'email-not-verified',
+          message: 'Please verify your email address before logging in.',
+        );
+      }
+
+      // final doc = await _db.collection('users').doc(user.uid).get();
+      final doc = await _db.collection('users').doc(updatedUser.uid).get();
       if(!doc.exists || doc.data() == null){
         return null;
       }
 
-      return UserProfile.fromMap(user.uid, doc.data()!);
+      // return UserProfile.fromMap(user.uid, doc.data()!);
+      return UserProfile.fromMap(updatedUser.uid, doc.data()!);
   }
 
   Future<UserProfile?> registerCustomer({
@@ -41,6 +54,8 @@ class AuthService {
 
     final user = result.user;
     if (user == null) return null;
+
+    await user.sendEmailVerification();
 
     await _db.collection('users').doc(user.uid).set({
       'created_at': FieldValue.serverTimestamp(),
@@ -75,6 +90,8 @@ class AuthService {
 
     final user = result.user;
     if (user == null) return null;
+
+    await user.sendEmailVerification();
 
     final brandId = restaurantName.toLowerCase().replaceAll(' ', '_');
     final brandRef = _db.collection('restaurant_brands').doc(brandId);
@@ -136,6 +153,26 @@ class AuthService {
     await _auth.sendPasswordResetEmail(
       email: email.trim(),
     );
+  }
+
+  // Future<void> resendVerificationEmail() async {
+  //   final user = _auth.currentUser;
+  //   if (user != null && !user.emailVerified) {
+  //     await user.sendEmailVerification();
+  //   }
+  // }
+
+  Future<void> resendVerificationEmail(String email, String password) async {
+    final result = await _auth.signInWithEmailAndPassword(
+      email: email.trim(),
+      password: password.trim(),
+    );
+
+    final user = result.user;
+    if (user != null) {
+      await user.sendEmailVerification();
+      await _auth.signOut();
+    }
   }
 
   Future<void> logout() async {

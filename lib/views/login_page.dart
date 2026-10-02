@@ -31,9 +31,21 @@ class _LoginPageState  extends State<LoginPage>{
     if (!mounted) return;
 
     if (profile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(viewModel.errorMessage ?? 'Login failed')),
-      );
+      // ScaffoldMessenger.of(context).showSnackBar(
+      //   SnackBar(content: Text(viewModel.errorMessage ?? 'Login failed')),
+      // );
+      // return;
+      // Check if error is due to unverified email
+      if (viewModel.isEmailUnverified) {
+        _showUnverifiedEmailDialog();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(viewModel.errorMessage ?? 'Login failed'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       return;
     }
 
@@ -67,6 +79,68 @@ class _LoginPageState  extends State<LoginPage>{
         ),
       );
     }
+  }
+
+  /// Displays dialog when email is not verified with an option to resend
+  void _showUnverifiedEmailDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text(
+          'Email Not Verified',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'Please verify your email address before logging in. Check your inbox for the verification link.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF006670),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+            ),
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              await _resendVerificationEmail();
+            },
+            child: const Text(
+              'Resend Email',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Helper to trigger resending the email verification via ViewModel
+  Future<void> _resendVerificationEmail() async {
+    final success = await viewModel.resendVerificationEmail(
+      emailController.text.trim(),
+      passwordController.text.trim(),
+    );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Verification email sent! Please check your inbox.'
+              : viewModel.errorMessage ?? 'Failed to send verification email.',
+        ),
+        backgroundColor: success ? Colors.green : Colors.red,
+      ),
+    );
   }
 
   @override
