@@ -22,20 +22,74 @@ class _LoginPageState  extends State<LoginPage>{
   final passwordController = TextEditingController();
   bool isPasswordVisible = false;
 
+  // Future<void> login() async {
+  //   final profile = await viewModel.login(
+  //     emailController.text.trim(),
+  //     passwordController.text.trim(),
+  //   );
+
+  //   if (!mounted) return;
+
+  //   if (profile == null) {
+  //     // ScaffoldMessenger.of(context).showSnackBar(
+  //     //   SnackBar(content: Text(viewModel.errorMessage ?? 'Login failed')),
+  //     // );
+  //     // return;
+  //     // Check if error is due to unverified email
+  //     if (viewModel.isEmailUnverified) {
+  //       _showUnverifiedEmailDialog();
+  //     } else {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //           content: Text(viewModel.errorMessage ?? 'Login failed'),
+  //           backgroundColor: Colors.red,
+  //         ),
+  //       );
+  //     }
+  //     return;
+  //   }
+
+  //   if (profile.isRestaurant) {
+  //     final restaurantId = profile.firstRestaurantId;
+  //     final restaurantBrandId = profile.restaurantBrandId;
+
+  //     if (restaurantId == null || restaurantBrandId == null) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(content: Text('Restaurant profile not found')),
+  //       );
+  //       return;
+  //     }
+
+  //     Navigator.pushReplacement(
+  //       context,
+  //       MaterialPageRoute(
+  //         builder: (_) =>
+  //             RestaurantQueuePage(
+  //               restaurantBrandId: restaurantBrandId,
+  //               restaurantId: restaurantId,
+  //               restaurantIds: profile.restaurantIds,
+  //             ),
+  //       ),
+  //     );
+  //   } else if (profile.isCustomer) {
+  //     Navigator.pushReplacement(
+  //       context,
+  //       MaterialPageRoute(
+  //           builder: (_) => CustomerHomeView(),
+  //       ),
+  //     );
+  //   }
+  // }
+
   Future<void> login() async {
-    final profile = await viewModel.login(
+    final success = await viewModel.requestOtp(
       emailController.text.trim(),
       passwordController.text.trim(),
     );
 
     if (!mounted) return;
 
-    if (profile == null) {
-      // ScaffoldMessenger.of(context).showSnackBar(
-      //   SnackBar(content: Text(viewModel.errorMessage ?? 'Login failed')),
-      // );
-      // return;
-      // Check if error is due to unverified email
+    if (!success) {
       if (viewModel.isEmailUnverified) {
         _showUnverifiedEmailDialog();
       } else {
@@ -49,6 +103,144 @@ class _LoginPageState  extends State<LoginPage>{
       return;
     }
 
+    // OTP request succeeded — display dialog to enter the 6-digit OTP code
+    _showOtpDialog();
+  }
+
+  /// Displays dialog to prompt for OTP code 
+  void _showOtpDialog() {
+    final otpController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) return;
+            viewModel.cancelOtpSession();
+            Navigator.of(dialogContext).pop();
+          },
+          child: ListenableBuilder(
+            listenable: viewModel,
+            builder: (context, _) {
+              return AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                title: const Text(
+                  'Enter OTP Code',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'An OTP has been sent to ${viewModel.pendingEmail}. It will expire in 5 minutes.',
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 15),
+                    TextField(
+                      controller: otpController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      enabled: !viewModel.isLoading,
+                      decoration: const InputDecoration(
+                        labelText: '6-Digit OTP',
+                        border: OutlineInputBorder(),
+                        counterText: '',
+                      ),
+                    ),
+                    if (viewModel.errorMessage != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        viewModel.errorMessage!,
+                        style: const TextStyle(color: Colors.red, fontSize: 13),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: viewModel.isLoading
+                            ? null
+                            : () async {
+                                final resent = await viewModel.resendOtp();
+                                if (context.mounted && resent) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('A new OTP has been sent to your email.'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                }
+                              },
+                        child: const Text(
+                          'Resend Code',
+                          style: TextStyle(color: Color(0xFF006670)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: viewModel.isLoading
+                        ? null
+                        : () {
+                            viewModel.cancelOtpSession();
+                            Navigator.of(dialogContext).pop();
+                          },
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF006670),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                    ),
+                    onPressed: viewModel.isLoading
+                        ? null
+                        : () async {
+                            final profile = await viewModel.verifyOtp(
+                              otpController.text.trim(),
+                            );
+
+                            if (!mounted) return;
+
+                            if (profile != null) {
+                              Navigator.of(dialogContext).pop();
+                              _navigateByUserRole(profile);
+                            }
+                          },
+                    child: viewModel.isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'Verify OTP',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  /// Helper to route user after successful OTP verification
+  void _navigateByUserRole(dynamic profile) {
     if (profile.isRestaurant) {
       final restaurantId = profile.firstRestaurantId;
       final restaurantBrandId = profile.restaurantBrandId;
@@ -63,19 +255,18 @@ class _LoginPageState  extends State<LoginPage>{
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              RestaurantQueuePage(
-                restaurantBrandId: restaurantBrandId,
-                restaurantId: restaurantId,
-                restaurantIds: profile.restaurantIds,
-              ),
+          builder: (_) => RestaurantQueuePage(
+            restaurantBrandId: restaurantBrandId,
+            restaurantId: restaurantId,
+            restaurantIds: profile.restaurantIds,
+          ),
         ),
       );
     } else if (profile.isCustomer) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-            builder: (_) => CustomerHomeView(),
+          builder: (_) => const CustomerHomeView(),
         ),
       );
     }

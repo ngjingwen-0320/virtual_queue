@@ -1,6 +1,8 @@
+import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_profile.dart';
+import 'otp_email_service.dart';
 
 // Talk to Firebase
 class AuthService {
@@ -10,36 +12,180 @@ class AuthService {
   // used for read Firestore data
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  Future<UserProfile?> login(String email, String password) async {
+  final OtpEmailService _otpEmailService = OtpEmailService();
 
-      final result = await _auth.signInWithEmailAndPassword(
-          email: email,
-          password: password,
+  String _generateOtp() {
+    final random = Random();
+    return (100000 + random.nextInt(900000)).toString();
+  }
+
+  Future<Map<String, String>> sendLoginOtp(String email, String password) async {
+    final result = await _auth.signInWithEmailAndPassword(
+      email: email.trim(),
+      password: password,
+    );
+
+    final user = result.user;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'user-not-found',
+        message: 'Authentication failed.',
       );
+    }
 
-      final user = result.user;
-      if (user == null) return null;
+    await user.reload();
+    final updatedUser = _auth.currentUser;
 
-      await user.reload();
-      final updatedUser = _auth.currentUser;
+    if (updatedUser == null || !updatedUser.emailVerified) {
+      await _auth.signOut();
+      throw FirebaseAuthException(
+        code: 'email-not-verified',
+        message: 'Please verify your email address before logging in.',
+      );
+    }
 
-      if (updatedUser == null || !updatedUser.emailVerified) {
+    // Generate 6-digit OTP and set 5-minute expiry
+    final otp = _generateOtp();
+    final now = DateTime.now();
+    final expiryTime = now.add(const Duration(minutes: 5));
+
+    // 1. Save OTP document to Firestore `otps` collection
+    final otpRef = _db.collection('otps').doc(updatedUser.uid);
+    await otpRef.set({
+      'otp': otp,
+      'created_at': Timestamp.fromDate(now),
+      'expires_at': Timestamp.fromDate(expiryTime),
+      'email': updatedUser.email,
+      'attempts': 0,
+    });
+
+    // 2. Dispatch OTP email directly via EmailJS
+    final bool emailSent = await _otpEmailService.sendOtpEmail(
+      userEmail: updatedUser.email ?? email,
+      otpCode: otp,
+    );
+
+    // 3. Sign out temporary Firebase Auth session
+    await _auth.signOut();
+
+    if (!emailSent) {
+      throw FirebaseAuthException(
+        code: 'email-send-failed',
+        message: 'Failed to send OTP email. Please try again.',
+      );
+    }
+
+    return {
+      'uid': updatedUser.uid,
+      'email': updatedUser.email ?? email,
+    };
+  }
+
+  Future<UserProfile?> verifyOtpAndLogin({
+    required String uid,
+    required String email,
+    required String password,
+    required String enteredOtp,
+  }) async {
+    final result = await _auth.signInWithEmailAndPassword(
+      email: email.trim(),
+      password: password,
+    );
+
+    final user = result.user;
+    if (user == null) return null;
+
+    final otpDocRef = _db.collection('otps').doc(user.uid);
+
+    try {
+      final otpDoc = await otpDocRef.get();
+
+      if (!otpDoc.exists || otpDoc.data() == null) {
         await _auth.signOut();
         throw FirebaseAuthException(
-          code: 'email-not-verified',
-          message: 'Please verify your email address before logging in.',
+          code: 'otp-not-found',
+          message: 'No OTP request found. Please request a new code.',
         );
       }
 
-      // final doc = await _db.collection('users').doc(user.uid).get();
-      final doc = await _db.collection('users').doc(updatedUser.uid).get();
-      if(!doc.exists || doc.data() == null){
+      final data = otpDoc.data()!;
+      final String storedOtp = data['otp'] ?? '';
+      final Timestamp? expiresAtTimestamp = data['expires_at'] as Timestamp?;
+      final int attempts = data['attempts'] ?? 0;
+
+      if (attempts >= 5) {
+        await otpDocRef.delete();
+        await _auth.signOut();
+        throw FirebaseAuthException(
+          code: 'too-many-attempts',
+          message: 'Maximum OTP attempts exceeded. Please request a new code.',
+        );
+      }
+
+      if (expiresAtTimestamp == null || DateTime.now().isAfter(expiresAtTimestamp.toDate())) {
+        await otpDocRef.delete();
+        await _auth.signOut();
+        throw FirebaseAuthException(
+          code: 'otp-expired',
+          message: 'OTP has expired. Please request a new OTP.',
+        );
+      }
+
+      if (storedOtp != enteredOtp.trim()) {
+        await otpDocRef.update({'attempts': FieldValue.increment(1)});
+        await _auth.signOut();
+        throw FirebaseAuthException(
+          code: 'invalid-otp',
+          message: 'Incorrect OTP entered. Access denied.',
+        );
+      }
+
+      await otpDocRef.delete();
+
+      final doc = await _db.collection('users').doc(user.uid).get();
+      if (!doc.exists || doc.data() == null) {
         return null;
       }
 
-      // return UserProfile.fromMap(user.uid, doc.data()!);
-      return UserProfile.fromMap(updatedUser.uid, doc.data()!);
+      return UserProfile.fromMap(user.uid, doc.data()!);
+    } catch (e) {
+      if (_auth.currentUser != null && e is FirebaseAuthException) {
+        await _auth.signOut();
+      }
+      rethrow;
+    }
   }
+
+  // Future<UserProfile?> login(String email, String password) async {
+
+  //     final result = await _auth.signInWithEmailAndPassword(
+  //         email: email,
+  //         password: password,
+  //     );
+
+  //     final user = result.user;
+  //     if (user == null) return null;
+
+  //     await user.reload();
+  //     final updatedUser = _auth.currentUser;
+
+  //     if (updatedUser == null || !updatedUser.emailVerified) {
+  //       await _auth.signOut();
+  //       throw FirebaseAuthException(
+  //         code: 'email-not-verified',
+  //         message: 'Please verify your email address before logging in.',
+  //       );
+  //     }
+
+  //     // final doc = await _db.collection('users').doc(user.uid).get();
+  //     final doc = await _db.collection('users').doc(updatedUser.uid).get();
+  //     if(!doc.exists || doc.data() == null){
+  //       return null;
+  //     }
+
+  //     // return UserProfile.fromMap(user.uid, doc.data()!);
+  //     return UserProfile.fromMap(updatedUser.uid, doc.data()!);
+  // }
 
   Future<UserProfile?> registerCustomer({
     required String name,
