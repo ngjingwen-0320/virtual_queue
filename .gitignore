@@ -72,3 +72,6 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+android/key.properties
+android/app/upload-keystore.jks
