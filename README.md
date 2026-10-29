@@ -61,8 +61,12 @@ Transfer the APK to an Android device to install and test the release version.
 # Demo Accounts
 Use the following accounts to test the application (OTP required):
 
-Role	    Email                             Password
-Customer	p23015051@student.newinti.edu.my  0320ngjingwen
-Restaurant	320.ngjingwen@gmail.com           Madamkwan123
+Role: Customer
+Email: p23015051@student.newinti.edu.my
+Password: 0320ngjingwen
+
+Role: Restaurant
+Email: 320.ngjingwen@gmail.com 
+Password: Madamkwan123
 
 Enter the relevant password during login. Both accounts require OTP verification, so access to the corresponding email inbox is needed to retrieve the OTP.
