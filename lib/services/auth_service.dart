@@ -220,6 +220,81 @@ class AuthService {
     );
   }
 
+  // Future<UserProfile?> registerRestaurant({
+  //   required String restaurantName,
+  //   required String businessRegistrationNo,
+  //   required String ownerName,
+  //   required String ownerEmail,
+  //   required String ownerPhone,
+  //   required String password,
+  //   required List<Map<String, String>> branches,
+  // }) async {
+  //   final result = await _auth.createUserWithEmailAndPassword(
+  //     email: ownerEmail,
+  //     password: password,
+  //   );
+
+  //   final user = result.user;
+  //   if (user == null) return null;
+
+  //   await user.sendEmailVerification();
+
+  //   final brandId = restaurantName.toLowerCase().replaceAll(' ', '_');
+  //   final brandRef = _db.collection('restaurant_brands').doc(brandId);
+
+  //   await brandRef.set({
+  //     'created_at': FieldValue.serverTimestamp(),
+  //     'name': restaurantName,
+  //     'business_registration_no': businessRegistrationNo,
+  //     'branch_count': branches.length,
+  //     'owner_id': user.uid,
+  //     'cuisine': '',
+  //     'about': '',
+  //   });
+
+  //   final restaurantIds = <String>[];
+
+  //   for (final branch in branches) {
+  //     final branchName = branch['branch_name'] ?? '';
+  //     final branchId = branches.length == 1
+  //         ? brandId
+  //         : '${brandId}_${branchName.toLowerCase().replaceAll(' ', '_')}';
+  //     final restaurantRef = brandRef.collection('restaurants').doc(branchId);
+  //     restaurantIds.add(restaurantRef.id);
+
+  //     await restaurantRef.set({
+  //       'created_at': FieldValue.serverTimestamp(),
+  //       'branch_name': branchName,
+  //       'address': branch['address'],
+  //       'brand_id': brandRef.id,
+  //       'owner_id': user.uid,
+  //       'phone': ownerPhone,
+  //       'estimated_time': 0,
+  //       'is_active': true,
+  //       'opening_hours': {},
+  //     });
+  //   }
+
+  //   await _db.collection('users').doc(user.uid).set({
+  //     'created_at': FieldValue.serverTimestamp(),
+  //     'email': ownerEmail,
+  //     'name': ownerName,
+  //     'owner_phone': ownerPhone,
+  //     'role': 'restaurant',
+  //     'brand_id': brandRef.id,
+  //     'restaurant_ids': restaurantIds,
+  //   });
+
+  //   return UserProfile(
+  //     uid: user.uid,
+  //     email: ownerEmail,
+  //     name: ownerName,
+  //     role: 'restaurant',
+  //     restaurantIds: restaurantIds,
+  //     restaurantBrandId: brandRef.id,
+  //   );
+  // }
+
   Future<UserProfile?> registerRestaurant({
     required String restaurantName,
     required String businessRegistrationNo,
@@ -242,6 +317,26 @@ class AuthService {
     final brandId = restaurantName.toLowerCase().replaceAll(' ', '_');
     final brandRef = _db.collection('restaurant_brands').doc(brandId);
 
+    final restaurantIds = <String>[];
+
+    for (final branch in branches) {
+      final branchName = branch['branch_name'] ?? '';
+      final branchId = branches.length == 1
+          ? brandId
+          : '${brandId}_${branchName.toLowerCase().replaceAll(' ', '_')}';
+      restaurantIds.add(branchId);
+    }
+
+    await _db.collection('users').doc(user.uid).set({
+      'created_at': FieldValue.serverTimestamp(),
+      'email': ownerEmail,
+      'name': ownerName,
+      'owner_phone': ownerPhone,
+      'role': 'restaurant',
+      'brand_id': brandRef.id,
+      'restaurant_ids': restaurantIds,
+    });
+
     await brandRef.set({
       'created_at': FieldValue.serverTimestamp(),
       'name': restaurantName,
@@ -252,15 +347,12 @@ class AuthService {
       'about': '',
     });
 
-    final restaurantIds = <String>[];
-
     for (final branch in branches) {
       final branchName = branch['branch_name'] ?? '';
       final branchId = branches.length == 1
           ? brandId
           : '${brandId}_${branchName.toLowerCase().replaceAll(' ', '_')}';
       final restaurantRef = brandRef.collection('restaurants').doc(branchId);
-      restaurantIds.add(restaurantRef.id);
 
       await restaurantRef.set({
         'created_at': FieldValue.serverTimestamp(),
@@ -274,16 +366,6 @@ class AuthService {
         'opening_hours': {},
       });
     }
-
-    await _db.collection('users').doc(user.uid).set({
-      'created_at': FieldValue.serverTimestamp(),
-      'email': ownerEmail,
-      'name': ownerName,
-      'owner_phone': ownerPhone,
-      'role': 'restaurant',
-      'brand_id': brandRef.id,
-      'restaurant_ids': restaurantIds,
-    });
 
     return UserProfile(
       uid: user.uid,
