@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'app_logger.dart';
 
 class OtpEmailService {
   static const String serviceId = 'service_otndmwn';
@@ -33,15 +33,25 @@ class OtpEmailService {
         }),
       );
 
+      // 🔐 Log OTP delivery status without exposing recipient emails or API responses.
       if (response.statusCode == 200) {
-        debugPrint('OTP email sent successfully to $userEmail');
+        AppLogger.info(
+          'OtpEmailService',
+          'OTP email sent successfully',
+        );
         return true;
       } else {
-        debugPrint('EmailJS OTP delivery failed [${response.statusCode}]:${response.body}');
+        AppLogger.warning(
+          'OtpEmailService',
+          'EmailJS OTP delivery failed [HTTP ${response.statusCode}]',
+        );
         return false;
       }
     } catch (e) {
-      debugPrint('Error sending OTP via EmailJS: $e');
+      AppLogger.error(
+        'OtpEmailService',
+        'Error sending OTP via EmailJS',
+      );
       return false;
     }
   }

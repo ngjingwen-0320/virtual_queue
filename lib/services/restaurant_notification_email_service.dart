@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'app_logger.dart';
 
 class RestaurantNotificationEmailService {
   static const String serviceId = 'service_ydg7n6n';
@@ -64,14 +65,23 @@ class RestaurantNotificationEmailService {
         }),
       );
 
+      // 🔐 Record email notification results without logging customer details.
       if (response.statusCode == 200) {
-        debugPrint('Email sent successfully');
+        AppLogger.info(
+          'RestaurantNotificationEmailService',
+          'Email sent successfully',
+        );
       } else {
-        debugPrint('EmailJS failed: ${response.statusCode}');
-        debugPrint(response.body);
+        AppLogger.warning(
+          'RestaurantNotificationEmailService',
+          'EmailJS failed: HTTP ${response.statusCode}',
+        );
       }
     } catch (e) {
-      debugPrint('EmailJS error: $e');
+      AppLogger.error(
+        'RestaurantNotificationEmailService',
+        'EmailJS error occurred',
+      );
     }
   }
 }

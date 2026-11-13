@@ -3,22 +3,23 @@ import '../utils/phone_number_utils.dart';
 // viewmodels/user_profile_viewmodel.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 import '../models/user_profile.dart';
+import 'package:virtual_queue/services/app_logger.dart';
 
 class UserProfileViewModel extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
+  
   bool _isLoading = false;
-  UserProfile? _cachedProfile;
-
+  UserProfile? _cachedProfile; 
+  
   // A map to hold all dynamic unmapped fields from Firestore
-  Map<String, dynamic> _allFieldsMap = {};
+  Map<String, dynamic> _allFieldsMap = {}; 
 
   bool get isLoading => _isLoading;
   UserProfile? get cachedProfile => _cachedProfile;
-
+  
   /// Exposes all document data keys dynamically to the form fields
   Map<String, dynamic> get allUserData => _allFieldsMap;
 
@@ -34,11 +35,10 @@ class UserProfileViewModel extends ChangeNotifier {
     try {
       _isLoading = true;
       notifyListeners();
-
-      debugPrint(
-        '📥 [UserProfileVM] Fetching custom profile data for UID: ${currentUser.uid}',
+      AppLogger.info(
+        'UserProfileVM',
+        '📥 Fetching custom profile data',
       );
-
       final DocumentSnapshot doc = await _firestore
           .collection('users')
           .doc(currentUser.uid)
@@ -46,34 +46,40 @@ class UserProfileViewModel extends ChangeNotifier {
 
       if (doc.exists && doc.data() != null) {
         final rawData = doc.data() as Map<String, dynamic>;
-
+        
         // 1. Maintain our raw dynamic data map tracking all client metadata details
         _allFieldsMap = Map<String, dynamic>.from(rawData);
 
         // 2. Map standard structured details into your explicit model configuration
-        _cachedProfile = UserProfile.fromMap(currentUser.uid, rawData);
-        debugPrint(
-          '✅ [UserProfileVM] Full user profile map parsed! Data keys found: ${_allFieldsMap.keys.toList()}',
+        _cachedProfile = UserProfile.fromMap(
+          currentUser.uid, 
+          rawData,
+        );
+        AppLogger.info(
+          'UserProfileVM',
+          '✅ Full user profile map parsed successfully',
         );
       } else {
-        debugPrint(
-          '⚠️ [UserProfileVM] No custom profile document found in /users collection.',
+        AppLogger.warning(
+          'UserProfileVM',
+          '⚠️ No custom profile document found in /users collection.',
         );
       }
 
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      debugPrint('❌ [UserProfileVM] Error pulling profile document: $e');
+      AppLogger.error(
+        'UserProfileVM',
+        '❌ Error pulling profile document',
+      );
       _isLoading = false;
       notifyListeners();
     }
   }
 
   /// 📤 EDIT & SAVE: Commits bulk payload modifications directly back to Firestore
-  Future<bool> updateCustomerProfile(
-    Map<String, dynamic> updatedDataPayload,
-  ) async {
+  Future<bool> updateCustomerProfile(Map<String, dynamic> updatedDataPayload) async {
     final User? currentUser = _auth.currentUser;
     if (currentUser == null) return false;
 
@@ -88,8 +94,9 @@ class UserProfileViewModel extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      debugPrint(
-        '📤 [UserProfileVM] Saving customer payload data to Firestore: $updatedDataPayload',
+      AppLogger.info(
+        'UserProfileVM',
+        '📤 Saving customer profile changes to Firestore',
       );
 
       // 1. Update document in Firestore using merge:true to avoid clearing unselected background data values
@@ -100,7 +107,7 @@ class UserProfileViewModel extends ChangeNotifier {
 
       // 2. Sync local variables immediately so changes appear instantly on screen
       _allFieldsMap.addAll(updatedDataPayload);
-
+      
       // 3. Re-instantiate our clean typed model framework wrapper utilizing the new mixed runtime maps
       _cachedProfile = UserProfile.fromMap(currentUser.uid, _allFieldsMap);
 
@@ -108,15 +115,16 @@ class UserProfileViewModel extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      debugPrint(
-        '❌ [UserProfileVM] Failed to save edited customer details: $e',
+      AppLogger.error(
+        'UserProfileVM',
+        '❌ Failed to save edited customer details',
       );
       _isLoading = false;
       notifyListeners();
       return false;
     }
   }
-
+  
   // --- UI Getters ---
   String get userEmail =>
       _cachedProfile?.email ??
@@ -131,7 +139,7 @@ class UserProfileViewModel extends ChangeNotifier {
     if (creationTime != null) {
       return 'Member since ${creationTime.year}';
     }
-    return 'Member since 2026';
+    return 'Member since 2026'; 
   }
 
   /// 🔐 SECURE: Updates the user's password in Firebase Auth with optional re-authentication
@@ -160,6 +168,11 @@ class UserProfileViewModel extends ChangeNotifier {
 
       // 2. Attempt the password update operation
       await currentUser.updatePassword(newPassword);
+
+      // Log successful password changes without exposing sensitive user information.
+      AppLogger.securityEvent(
+        '🔐 User password changed successfully',
+      );
 
       _isLoading = false;
       notifyListeners();
@@ -197,10 +210,12 @@ class UserProfileViewModel extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      debugPrint(
-        '🚪 [UserProfileVM] Erasing authenticated session state token...',
-      );
       await _auth.signOut();
+
+      AppLogger.info(
+        'UserProfileVM',
+        '🚪 Erasing authenticated session state token...',
+      );
 
       _cachedProfile = null;
       _allFieldsMap.clear();
@@ -208,7 +223,10 @@ class UserProfileViewModel extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      debugPrint('❌ [UserProfileVM] Failed to logout session: $e');
+      AppLogger.error(
+        'UserProfileVM',
+        '❌ Failed to logout session',
+      );
       _isLoading = false;
       notifyListeners();
       return false;

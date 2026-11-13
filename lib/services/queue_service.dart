@@ -3,8 +3,10 @@ import 'package:virtual_queue/models/restaurant_queue_model.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:virtual_queue/services/restaurant_notification_email_service.dart';
+import 'package:virtual_queue/services/app_logger.dart';
 
 class QueueService {
+
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final RestaurantNotificationEmailService _emailService =
       RestaurantNotificationEmailService();
@@ -19,10 +21,10 @@ class QueueService {
     }
   }
 
-  // Function to join a restaurant's queue
+  // Function to join a restaurant's queue 
   Future<int?> joinQueue({
-    required String brandId,
-    required String restaurantId,
+    required String brandId, 
+    required String restaurantId, 
     required String userId,
   }) async {
     // 1. PRE-CHECK VALIDATION: Check if this user already has an active 'WAITING' ticket anywhere
@@ -36,21 +38,20 @@ class QueueService {
 
     // If an active ticket is found, abort the process immediately!
     if (existingActiveQueues.docs.isNotEmpty) {
-      debugPrint(
-        '🚫 [QueueService] Join blocked: User $userId is already waiting in an active line.',
+      AppLogger.warning(
+        'QueueService',
+        '🚫 Queue join blocked: User already has an active ticket',
       );
-      throw Exception(
-        'You cannot join a new queue while you are already holding an active ticket.',
-      );
+      throw Exception('You cannot join a new queue while you are already holding an active ticket.');
     }
 
     // -------------------------------------------------------------------------
     // 2. Continuing with original execution loop if validation clear:
     // -------------------------------------------------------------------------
-
+    
     // Reference to the restaurant's queue document
     DocumentReference queueRef = _db.collection('queues').doc(restaurantId);
-
+    
     // USER PROFILE SHORTCUT REFERENCE: Path: users -> userId -> active_queue -> restaurantId
     DocumentReference userShortcutRef = _db
         .collection('users')
@@ -65,7 +66,7 @@ class QueueService {
 
       if (!queueSnapshot.exists) {
         assignedNumber = 1;
-
+        
         transaction.set(queueRef, {
           'brand_id': brandId,
           'restaurant_id': restaurantId,
@@ -73,8 +74,7 @@ class QueueService {
           'next_available_number': 2,
         });
       } else {
-        Map<String, dynamic> data =
-            queueSnapshot.data() as Map<String, dynamic>;
+        Map<String, dynamic> data = queueSnapshot.data() as Map<String, dynamic>;
         assignedNumber = data['next_available_number'] ?? 1;
 
         transaction.update(queueRef, {
@@ -86,7 +86,7 @@ class QueueService {
 
       // Generate a document reference inside the subcollection first
       DocumentReference ticketRef = queueRef.collection('tickets').doc();
-      final String generatedTicketId = ticketRef.id;
+      final String generatedTicketId = ticketRef.id; 
 
       // Write to master tickets subcollection inside the transaction block
       transaction.set(ticketRef, {
@@ -98,7 +98,7 @@ class QueueService {
 
       // Write directly to the user profile collection inside the same transaction loop
       transaction.set(userShortcutRef, {
-        'ticket_id': generatedTicketId,
+        'ticket_id': generatedTicketId, 
         'brand_id': brandId,
         'restaurant_id': restaurantId,
         'ticket_number': assignedNumber,
@@ -106,7 +106,7 @@ class QueueService {
         'joined_at': FieldValue.serverTimestamp(),
       });
 
-      return assignedNumber;
+      return assignedNumber; 
     });
   }
 
@@ -133,27 +133,34 @@ class QueueService {
         .doc(ticketId);
 
     try {
-      debugPrint(
-        '🎬 [QueueService] Initializing Cancellation Batch for Ticket: $ticketId',
+      // 🎟️ Record queue cancellation progress.
+      // Ticket IDs are included only during Debug-mode testing.
+      AppLogger.ticketEvent(
+        '🎬 Initializing Cancellation Batch',
+        ticketId,
       );
-
       // Step A: Remove the tracking shortcut from the user's active subcollection
       batch.delete(userQueueRef);
 
       // Step B: Mark the status field as "CANCELLED" inside the restaurant queues nested path
       batch.update(restaurantTicketRef, {
         'status': 'CANCELLED',
-        'cancelled_at': FieldValue.serverTimestamp(),
+        'cancelled_at': FieldValue.serverTimestamp(), 
       });
 
       // Commit both operations together atomically
       await batch.commit();
-      debugPrint(
-        '✅ [QueueService] Batch commit complete. Ticket $ticketId successfully cancelled.',
+      // ✅ Log successful cancellation after the Firestore batch commits.
+      AppLogger.ticketEvent(
+        '✅ Batch commit complete. Ticket successfully cancelled',
+        ticketId,
       );
       return true;
     } catch (e) {
-      debugPrint('🚨 [QueueService Failure] Cancel transaction aborted: $e');
+      AppLogger.error(
+        'QueueService',
+        '🚨 Cancel transaction aborted',
+      );
       return false;
     }
   }
@@ -265,6 +272,13 @@ class QueueService {
 
       transaction.update(queueRef, {'current_serving': nextQueueNumber});
     });
+    if (calledUserId != null) {
+      // 🔐 Record queue activity without exposing customer identifiers.
+      AppLogger.info(
+        'QueueService',
+        '📢 Next customer called successfully',
+      );
+    }
     if (calledUserId != null && calledQueueNumber != null) {
       final userData = await _notificationProfile(calledUserId);
 
@@ -356,6 +370,14 @@ class QueueService {
 
       transaction.update(queueRef, {'current_serving': 0});
     });
+
+    if (cancelledUserId != null) {
+      AppLogger.info(
+        'QueueService',
+        '⏭️ Current customer skipped successfully',
+      );
+    }
+
     if (cancelledUserId != null && cancelledQueueNumber != null) {
       final userData = await _notificationProfile(cancelledUserId);
 
@@ -437,9 +459,16 @@ class QueueService {
       });
     }
 
-    batch.update(queueRef, {'current_serving': 0});
+    batch.update(queueRef, {
+      'current_serving': 0,
+    });
 
     await batch.commit();
+
+    AppLogger.info(
+      'QueueService',
+      '✅ Current customer marked as served',
+    );
   }
 
   Future<void> resetQueue(String restaurantId) async {
@@ -494,14 +523,23 @@ class QueueService {
       }
     }
 
-    batch.set(queueRef, {
-      'current_serving': 0,
-      'next_available_number': 1,
-      'last_reset_at': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    batch.set(
+      queueRef,
+      {
+        'current_serving': 0,
+        'next_available_number': 1,
+        'last_reset_at': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
 
     // Commit all ticket, user, and queue updates.
     await batch.commit();
+
+    AppLogger.warning(
+      'QueueService',
+      '🔄 Restaurant queue reset successfully',
+    );
 
     final queueDoc = await queueRef.get();
     final queueData = queueDoc.data() as Map<String, dynamic>? ?? {};

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'restaurant_card_page.dart';
 import '../viewmodels/queue_status_viewmodel.dart';
 import '../models/queue_status_state.dart';
+import 'package:virtual_queue/services/app_logger.dart';
 
 class QueueStatusPage extends StatefulWidget {
   final String? restaurantId;
@@ -178,8 +179,12 @@ class _QueueStatusPageState extends State<QueueStatusPage> {
     if (_isSearchingTicket) return;
     
     setState(() => _isSearchingTicket = true);
-    debugPrint('🚀 [Queue Status View] Initializing background verification check...');
-    
+    // 🚀 Record the start of the active-ticket verification process.
+    AppLogger.info(
+      'QueueStatusView',
+      '🚀 Initializing background verification check...',
+    );
+
     // Give the app authentication sequence 400 milliseconds to initialize state user keys completely
     await Future.delayed(const Duration(milliseconds: 400));
     
@@ -194,9 +199,17 @@ class _QueueStatusPageState extends State<QueueStatusPage> {
         _activeTicketNumber = ticketData['myTicketNumber'];
         _activeTicketId = ticketData['ticketId'];
         _hasAlertedCalled = false;
-        debugPrint('✅ [Queue Status View] Engine connected successfully! Active Ticket: #$_activeTicketNumber');
+        // ✅ Confirm an active ticket was found without exposing its number.
+        AppLogger.info(
+          'QueueStatusView',
+          '✅ Engine connected successfully! Active ticket found',
+        );
       } else {
-        debugPrint('❌ [Queue Status View] Resetting loop: No matching live ticket detected.');
+        // ❌ Record when no matching active ticket is detected.
+        AppLogger.info(
+          'QueueStatusView',
+          '❌ Resetting loop: No matching live ticket detected.',
+        );
       }
     });
   }
@@ -720,13 +733,17 @@ class _QueueStatusPageState extends State<QueueStatusPage> {
                             const SizedBox(width: 12),
                             InkWell(
                               onTap: () {
-                                debugPrint('🔍 [Navigation] Heading back to card page details for: $streamRestaurantId');
-                                Navigator.push(
+                                // 🔍 Track navigation to restaurant details without logging restaurant IDs.
+                                  AppLogger.info(
+                                    'Navigation',
+                                    '🔍 Heading back to restaurant card page details',
+                                  );
+                                  Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) => RestaurantCardPage(
                                       brandId: streamBrandId,       // 🚀 FIXED: Isolated completely from local initializers
-                                      restaurantId: streamRestaurantId, 
+                                      restaurantId: streamRestaurantId,
                                     ),
                                   ),
                                 );

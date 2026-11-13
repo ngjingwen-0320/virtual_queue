@@ -1,3 +1,4 @@
+
 // // viewmodels/queue_status_viewmodel.dart
 // import 'dart:async';
 // import 'package:cloud_firestore/cloud_firestore.dart';
@@ -18,7 +19,7 @@
 
 //     try {
 //       debugPrint('🔎 [Queue Status VM] Querying active tickets for user: $currentUserId');
-      
+
 //       // Look up tickets across the root collection matching the user state
 //       final querySnapshot = await _firestore
 //           .collection('tickets') // Ensure this exactly matches your collection name
@@ -30,7 +31,7 @@
 //       if (querySnapshot.docs.isNotEmpty) {
 //         final doc = querySnapshot.docs.first;
 //         final data = doc.data();
-        
+
 //         debugPrint('🎟️ [Queue Status VM] Active ticket found! ID: ${doc.id}');
 //         return {
 //           'ticketId': doc.id,
@@ -56,7 +57,7 @@
 //     return queueSnapshotStream.asyncMap((queueSnap) async {
 //       // 2. Hydrate configuration parameters by reading master files
 //       final brandSnap = await _firestore.collection('restaurant_brands').doc(brandId).get();
-      
+
 //       // 3. Drill down into the child subcollection path
 //       final restSnap = await _firestore
 //           .collection('restaurant_brands')
@@ -81,6 +82,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../models/queue_status_state.dart';
 import '../services/queue_service.dart';
+import '../services/app_logger.dart';
 
 class QueueStatusViewModel with ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -99,7 +101,7 @@ class QueueStatusViewModel with ChangeNotifier {
 
   //   try {
   //     debugPrint('🔎 [Queue Status VM] Querying active tickets for user: $currentUserId');
-      
+
   //     final querySnapshot = await _firestore
   //         .collection('tickets')
   //         .where('user_id', isEqualTo: currentUserId)
@@ -110,7 +112,7 @@ class QueueStatusViewModel with ChangeNotifier {
   //     if (querySnapshot.docs.isNotEmpty) {
   //       final doc = querySnapshot.docs.first;
   //       final data = doc.data();
-        
+
   //       debugPrint('🎟️ [Queue Status VM] Active ticket found! ID: ${doc.id}');
   //       return {
   //         'ticketId': doc.id,
@@ -128,12 +130,20 @@ class QueueStatusViewModel with ChangeNotifier {
   Future<Map<String, dynamic>?> fetchActiveUserTicket() async {
     final user = _auth.currentUser;
     if (user == null) {
-      debugPrint('⚠️ [Queue Status VM] Aborted: No authenticated user object in state memory.');
+      // ⚠️ Record when ticket retrieval is blocked by a missing user session.
+      AppLogger.warning(
+        'QueueStatusVM',
+        '⚠️ Aborted: No authenticated user object in state memory.',
+      );
       return null;
     }
 
     final String currentUserId = user.uid;
-    debugPrint('🔎 [Queue Status VM] Fetching direct shortcut ticket for UID: $currentUserId');
+    // 🔎 Track ticket retrieval without exposing the user's Firebase UID.
+    AppLogger.info(
+      'QueueStatusVM',
+      '🔎 Fetching direct shortcut ticket for authenticated user',
+    );
 
     try {
       // Direct shortcut lookup instead of an expensive collectionGroup search
@@ -157,7 +167,11 @@ class QueueStatusViewModel with ChangeNotifier {
         };
       }
     } catch (e) {
-      debugPrint('❌ [Queue Status VM] Error fetching user active_queue document: $e');
+      // ❌ Record ticket retrieval failures without printing raw exceptions.
+      AppLogger.error(
+        'QueueStatusVM',
+        '❌ Error fetching user active_queue document',
+      );
     }
     return null;
   }
@@ -179,70 +193,78 @@ class QueueStatusViewModel with ChangeNotifier {
         .limit(1)
         .snapshots()
         .switchMap((userShortcutSnap) {
-          
-          // If the user isn't holding any active tickets, emit null instantly to clear the UI
-          if (userShortcutSnap.docs.isEmpty) {
-            debugPrint('ℹ️ [Queue Status Stream] User has no active waiting tickets.');
-            return Stream.value(null);
-          }
 
-          final shortcutData = userShortcutSnap.docs.first.data();
-          final String restaurantId = userShortcutSnap.docs.first.id;
-          final String brandId = shortcutData['brand_id'] ?? '';
+      // If the user isn't holding any active tickets, emit null instantly to clear the UI
+      if (userShortcutSnap.docs.isEmpty) {
+        // ℹ️ Record when the user has no active waiting tickets.
+        AppLogger.info(
+          'QueueStatusStream',
+          'ℹ️ User has no active waiting tickets.',
+        );
+        return Stream.value(null);
+      }
 
-          if (brandId.isEmpty || restaurantId.isEmpty) {
-            return Stream.value(null);
-          }
+      final shortcutData = userShortcutSnap.docs.first.data();
+      final String restaurantId = userShortcutSnap.docs.first.id;
+      final String brandId = shortcutData['brand_id'] ?? '';
 
-          debugPrint('🔗 [Queue Status Stream] User ticket found (#${shortcutData['ticket_number']}). Subscribing to live updates for restaurant: $restaurantId');
+      if (brandId.isEmpty || restaurantId.isEmpty) {
+        return Stream.value(null);
+      }
 
-          // B. 🚀 THE REAL-TIME FIX: Listen to real-time SNAPSHOTS of the master queue document
-          final Stream<DocumentSnapshot> masterQueueStream = 
-              _firestore.collection('queues').doc(restaurantId).snapshots();
+      // 🔗 Record live tracking subscriptions without exposing ticket details.
+      AppLogger.info(
+        'QueueStatusStream',
+        '🔗 Active ticket found. Subscribing to live queue updates.',
+      );
 
-          // C. Map master snapshot events into your unified tracking state object as they occur
-          return masterQueueStream.asyncMap((queueSnap) async {
-            final masterQueueData = queueSnap.data() as Map<String, dynamic>? ?? {};
+      // B. 🚀 THE REAL-TIME FIX: Listen to real-time SNAPSHOTS of the master queue document
+      final Stream<DocumentSnapshot> masterQueueStream =
+      _firestore.collection('queues').doc(restaurantId).snapshots();
 
-            // Combine live master counters with our persistent user ticket parameters
-            final Map<String, dynamic> combinedQueueData = {
-              ...masterQueueData, 
-              'ticket_number': shortcutData['ticket_number'] ?? 0,
-              'ticket_id': shortcutData['ticket_id'] ?? '',
-              'brand_id': brandId,
-              'restaurant_id': restaurantId,
-              'user_ticket_status': shortcutData['status'] ?? 'WAITING',
-            };
+      // C. Map master snapshot events into your unified tracking state object as they occur
+      return masterQueueStream.asyncMap((queueSnap) async {
+        final masterQueueData = queueSnap.data() as Map<String, dynamic>? ?? {};
 
-            // D. Fetch static reference blocks for copywriting strings
-            final brandSnap = await _firestore.collection('restaurant_brands').doc(brandId).get();
-            final restSnap = await _firestore
-                .collection('restaurant_brands')
-                .doc(brandId)
-                .collection('restaurants')
-                .doc(restaurantId)
-                .get();
+        // Combine live master counters with our persistent user ticket parameters
+        final Map<String, dynamic> combinedQueueData = {
+          ...masterQueueData,
+          'ticket_number': shortcutData['ticket_number'] ?? 0,
+          'ticket_id': shortcutData['ticket_id'] ?? '',
+          'brand_id': brandId,
+          'restaurant_id': restaurantId,
+          'user_ticket_status': shortcutData['status'] ?? 'WAITING',
+        };
 
-            final myTicketNumber = shortcutData['ticket_number'] ?? 0;
+        // D. Fetch static reference blocks for copywriting strings
+        final brandSnap = await _firestore.collection('restaurant_brands').doc(brandId).get();
+        final restSnap = await _firestore
+            .collection('restaurant_brands')
+            .doc(brandId)
+            .collection('restaurants')
+            .doc(restaurantId)
+            .get();
 
-            final peopleAheadSnap = await _firestore
-                .collection('queues')
-                .doc(restaurantId)
-                .collection('tickets')
-                .where('status', isEqualTo: 'WAITING')
-                .where('queue_number', isLessThan: myTicketNumber)
-                .get();
+        final myTicketNumber = shortcutData['ticket_number'] ?? 0;
 
-            final peopleAhead = peopleAheadSnap.docs.length;
+        final peopleAheadSnap = await _firestore
+            .collection('queues')
+            .doc(restaurantId)
+            .collection('tickets')
+            .where('status', isEqualTo: 'WAITING')
+            .where('queue_number', isLessThan: myTicketNumber)
+            .get();
 
-            return QueueStatusState(
-              queueData: combinedQueueData,
-              restaurantData: restSnap.data() as Map<String, dynamic>? ?? {},
-              brandData: brandSnap.data() as Map<String, dynamic>? ?? {},
-              peopleAhead: peopleAhead,
-            );
-          });
-        });
+        final peopleAhead = peopleAheadSnap.docs.length;
+
+        return QueueStatusState(
+          queueData: combinedQueueData,
+          restaurantData: restSnap.data() as Map<String, dynamic>? ?? {},
+          brandData: brandSnap.data() as Map<String, dynamic>? ?? {},
+          peopleAhead: peopleAhead,
+        );
+      });
+    });
   }
 
   /// ❌ ACTION ROUTE: Called when the user clicks "Cancel My Position" on the Status Screen
@@ -252,7 +274,11 @@ class QueueStatusViewModel with ChangeNotifier {
   }) async {
     final user = _auth.currentUser;
     if (user == null || ticketId.isEmpty || restaurantId.isEmpty) {
-      debugPrint('⚠️ [Queue Status VM] Cancel aborted: Missing session credentials or document identifiers.');
+      // ⚠️ Record rejected cancellation requests without exposing identifiers.
+      AppLogger.warning(
+        'QueueStatusVM',
+        '⚠️ Cancel aborted: Missing session credentials or document identifiers.',
+      );
       return false;
     }
 

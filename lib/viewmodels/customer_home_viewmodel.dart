@@ -6,6 +6,7 @@ import '../models/restaurant_display_state.dart';
 import '../models/restaurant_model.dart';
 import '../models/restaurant_brand_model.dart';
 import '../models/restaurant_queue_model.dart';
+import 'package:virtual_queue/services/app_logger.dart';
 
 class CustomerHomeViewModel {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -16,8 +17,13 @@ class CustomerHomeViewModel {
 
   // UI inputs hook here
   void applyCuisineFilter(String? cuisine) {
-    debugPrint('⚡ [ViewModel] UI requested category change to: "$cuisine"');
-    _filterSubject.add(cuisine); 
+    // ⚡ Record category filter changes
+    // without logging the selected value.
+    AppLogger.info(
+      'CustomerHomeViewModel',
+      '⚡ UI requested category change',
+    );
+    _filterSubject.add(cuisine);
   }
 
   void updateSearchQuery(String query) {
@@ -125,7 +131,12 @@ class CustomerHomeViewModel {
           displayCards.add(cardState);
         }
       } catch (e) {
-        debugPrint('🚨 Processing engine subcollection pipeline failure: $e');
+        // 🚨 Record restaurant processing failures
+        // without exposing database exceptions.
+        AppLogger.error(
+          'CustomerHomeViewModel',
+          '🚨 Processing engine subcollection pipeline failure',
+        );
       }
     }
     return displayCards;

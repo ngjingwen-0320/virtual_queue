@@ -6,6 +6,7 @@ import '../models/restaurant_display_state.dart';
 import '../models/restaurant_model.dart';
 import '../models/restaurant_brand_model.dart';
 import '../models/restaurant_queue_model.dart';
+import 'package:virtual_queue/services/app_logger.dart';
 
 class SavedRestaurantsViewModel {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -92,7 +93,12 @@ class SavedRestaurantsViewModel {
               );
               bookmarkedCards.add(cardState);
             } catch (e) {
-              debugPrint('🚨 [ViewModel Loop Exception] Processing bookmark failed: $e');
+              // 🚨 Record bookmark processing failures
+              // without exposing raw exceptions.
+              AppLogger.error(
+                'SavedRestaurantsViewModel',
+                '🚨 Processing bookmark failed',
+              );
             }
           }
           return bookmarkedCards;
