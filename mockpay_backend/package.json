@@ -1,0 +1,26 @@
+{
+  "name": "mockpay_backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js",
+    "start:bank": "node mock_bank_server.js",
+    "setup:callbacks": "node setup_callback_keys.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^18.0.10",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.4",
+    "firebase-admin": "^14.5.0",
+    "nodemailer": "^10.5.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.10.0"
+  }
+}

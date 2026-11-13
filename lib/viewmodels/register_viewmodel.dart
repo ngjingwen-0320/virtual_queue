@@ -1,3 +1,5 @@
+import '../utils/password_utils.dart';
+import '../utils/phone_number_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_profile.dart';
@@ -8,6 +10,8 @@ class RegisterViewmodel extends ChangeNotifier {
 
   bool isLoading = false;
   String? errorMessage;
+
+  String? validatePassword(String password) => PasswordUtils.validate(password);
 
   Future<UserProfile?> registerCustomer({
     required String name,
@@ -21,19 +25,37 @@ class RegisterViewmodel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      if (name.isEmpty || email.isEmpty || phone.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
+      if (name.isEmpty ||
+          email.isEmpty ||
+          phone.isEmpty ||
+          password.isEmpty ||
+          confirmPassword.isEmpty) {
         errorMessage = 'Please fill in all fields';
         return null;
       }
+
+      final phoneError = PhoneNumberUtils.validate(phone);
+      if (phoneError != null) {
+        errorMessage = phoneError;
+        return null;
+      }
+      final normalizedPhone = PhoneNumberUtils.normalize(phone);
+      final passwordError = validatePassword(password);
+
+      if (passwordError != null) {
+        errorMessage = 'Please enter a valid password';
+        return null;
+      }
+
       if (password != confirmPassword) {
         errorMessage = 'Passwords do not match';
         return null;
       }
       return await _authService.registerCustomer(
-          name: name,
-          email: email,
-          phone: phone,
-          password: password
+        name: name,
+        email: email,
+        phone: normalizedPhone,
+        password: password,
       );
     } on FirebaseAuthException catch (e) {
       if (e.code == 'email-already-in-use') {
@@ -82,13 +104,27 @@ class RegisterViewmodel extends ChangeNotifier {
         return null;
       }
 
+      final phoneError = PhoneNumberUtils.validate(ownerPhone);
+      if (phoneError != null) {
+        errorMessage = phoneError;
+        return null;
+      }
+      final normalizedPhone = PhoneNumberUtils.normalize(ownerPhone);
+      final passwordError = validatePassword(password);
+
+      if (passwordError != null) {
+        errorMessage = 'Please enter a valid password';
+        return null;
+      }
+
       if (password != confirmPassword) {
         errorMessage = 'Passwords do not match';
         return null;
       }
 
       for (final branch in branches) {
-        if ((branch['branch_name'] ?? '').isEmpty || (branch['address'] ?? '').isEmpty) {
+        if ((branch['branch_name'] ?? '').isEmpty ||
+            (branch['address'] ?? '').isEmpty) {
           errorMessage = 'Please fill in all branch details';
           return null;
         }
@@ -99,7 +135,7 @@ class RegisterViewmodel extends ChangeNotifier {
         businessRegistrationNo: businessRegistrationNo,
         ownerName: ownerName,
         ownerEmail: ownerEmail,
-        ownerPhone: ownerPhone,
+        ownerPhone: normalizedPhone,
         password: password,
         branches: branches,
       );

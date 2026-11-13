@@ -1,22 +1,24 @@
+import '../utils/password_utils.dart';
+import '../utils/phone_number_utils.dart';
 // viewmodels/user_profile_viewmodel.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; 
-import '../models/user_profile.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/user_profile.dart';
 
 class UserProfileViewModel extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+
   bool _isLoading = false;
-  UserProfile? _cachedProfile; 
-  
+  UserProfile? _cachedProfile;
+
   // A map to hold all dynamic unmapped fields from Firestore
-  Map<String, dynamic> _allFieldsMap = {}; 
+  Map<String, dynamic> _allFieldsMap = {};
 
   bool get isLoading => _isLoading;
   UserProfile? get cachedProfile => _cachedProfile;
-  
+
   /// Exposes all document data keys dynamically to the form fields
   Map<String, dynamic> get allUserData => _allFieldsMap;
 
@@ -33,8 +35,10 @@ class UserProfileViewModel extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      debugPrint('📥 [UserProfileVM] Fetching custom profile data for UID: ${currentUser.uid}');
-      
+      debugPrint(
+        '📥 [UserProfileVM] Fetching custom profile data for UID: ${currentUser.uid}',
+      );
+
       final DocumentSnapshot doc = await _firestore
           .collection('users')
           .doc(currentUser.uid)
@@ -42,18 +46,19 @@ class UserProfileViewModel extends ChangeNotifier {
 
       if (doc.exists && doc.data() != null) {
         final rawData = doc.data() as Map<String, dynamic>;
-        
+
         // 1. Maintain our raw dynamic data map tracking all client metadata details
         _allFieldsMap = Map<String, dynamic>.from(rawData);
 
         // 2. Map standard structured details into your explicit model configuration
-        _cachedProfile = UserProfile.fromMap(
-          currentUser.uid, 
-          rawData,
+        _cachedProfile = UserProfile.fromMap(currentUser.uid, rawData);
+        debugPrint(
+          '✅ [UserProfileVM] Full user profile map parsed! Data keys found: ${_allFieldsMap.keys.toList()}',
         );
-        debugPrint('✅ [UserProfileVM] Full user profile map parsed! Data keys found: ${_allFieldsMap.keys.toList()}');
       } else {
-        debugPrint('⚠️ [UserProfileVM] No custom profile document found in /users collection.');
+        debugPrint(
+          '⚠️ [UserProfileVM] No custom profile document found in /users collection.',
+        );
       }
 
       _isLoading = false;
@@ -66,15 +71,26 @@ class UserProfileViewModel extends ChangeNotifier {
   }
 
   /// 📤 EDIT & SAVE: Commits bulk payload modifications directly back to Firestore
-  Future<bool> updateCustomerProfile(Map<String, dynamic> updatedDataPayload) async {
+  Future<bool> updateCustomerProfile(
+    Map<String, dynamic> updatedDataPayload,
+  ) async {
     final User? currentUser = _auth.currentUser;
     if (currentUser == null) return false;
 
+    if (updatedDataPayload.containsKey('phone')) {
+      final normalized = PhoneNumberUtils.tryNormalize(
+        updatedDataPayload['phone']?.toString() ?? '',
+      );
+      if (normalized == null) return false;
+      updatedDataPayload = {...updatedDataPayload, 'phone': normalized};
+    }
     try {
       _isLoading = true;
       notifyListeners();
 
-      debugPrint('📤 [UserProfileVM] Saving customer payload data to Firestore: $updatedDataPayload');
+      debugPrint(
+        '📤 [UserProfileVM] Saving customer payload data to Firestore: $updatedDataPayload',
+      );
 
       // 1. Update document in Firestore using merge:true to avoid clearing unselected background data values
       await _firestore
@@ -84,7 +100,7 @@ class UserProfileViewModel extends ChangeNotifier {
 
       // 2. Sync local variables immediately so changes appear instantly on screen
       _allFieldsMap.addAll(updatedDataPayload);
-      
+
       // 3. Re-instantiate our clean typed model framework wrapper utilizing the new mixed runtime maps
       _cachedProfile = UserProfile.fromMap(currentUser.uid, _allFieldsMap);
 
@@ -92,24 +108,30 @@ class UserProfileViewModel extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      debugPrint('❌ [UserProfileVM] Failed to save edited customer details: $e');
+      debugPrint(
+        '❌ [UserProfileVM] Failed to save edited customer details: $e',
+      );
       _isLoading = false;
       notifyListeners();
       return false;
     }
   }
-  
+
   // --- UI Getters ---
-  String get userEmail => _cachedProfile?.email ?? (_auth.currentUser?.email ?? 'guest.user@example.com');
+  String get userEmail =>
+      _cachedProfile?.email ??
+      (_auth.currentUser?.email ?? 'guest.user@example.com');
   String get userDisplayName => _cachedProfile?.name ?? 'Queue Guest';
-  String get userPhone => _allFieldsMap['phone'] ?? ''; // Safely exposes phone field out of raw dataset maps
-  
+  String get userPhone => PhoneNumberUtils.display(
+    _allFieldsMap['phone']?.toString() ?? '',
+  ); // Safely exposes phone field out of raw dataset maps
+
   String get userJoinedDate {
     final DateTime? creationTime = _auth.currentUser?.metadata.creationTime;
     if (creationTime != null) {
       return 'Member since ${creationTime.year}';
     }
-    return 'Member since 2026'; 
+    return 'Member since 2026';
   }
 
   /// 🔐 SECURE: Updates the user's password in Firebase Auth with optional re-authentication
@@ -118,6 +140,8 @@ class UserProfileViewModel extends ChangeNotifier {
     required String currentPassword,
     required String newPassword,
   }) async {
+    final passwordError = PasswordUtils.validate(newPassword);
+    if (passwordError != null) return passwordError;
     final User? currentUser = _auth.currentUser;
     if (currentUser == null || currentUser.email == null) {
       return 'Session expired. Please log out and sign in again.';
@@ -143,7 +167,7 @@ class UserProfileViewModel extends ChangeNotifier {
     } on FirebaseAuthException catch (authError) {
       _isLoading = false;
       notifyListeners();
-      
+
       // Explicit error mapping categorization rules
       switch (authError.code) {
         case 'wrong-password':
@@ -157,7 +181,8 @@ class UserProfileViewModel extends ChangeNotifier {
         case 'network-request-failed':
           return 'Network error. Please verify your internet connection connection status.';
         default:
-          return authError.message ?? 'An unexpected authentication error occurred.';
+          return authError.message ??
+              'An unexpected authentication error occurred.';
       }
     } catch (e) {
       _isLoading = false;
@@ -172,10 +197,12 @@ class UserProfileViewModel extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      debugPrint('🚪 [UserProfileVM] Erasing authenticated session state token...');
+      debugPrint(
+        '🚪 [UserProfileVM] Erasing authenticated session state token...',
+      );
       await _auth.signOut();
 
-      _cachedProfile = null; 
+      _cachedProfile = null;
       _allFieldsMap.clear();
       _isLoading = false;
       notifyListeners();

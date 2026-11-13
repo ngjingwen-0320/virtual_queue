@@ -75,3 +75,19 @@ node_modules/
 
 android/key.properties
 android/app/upload-keystore.jks
+
+mock_payment_tools/
+.env
+.env.*
+
+# Node.js dependencies
+mockpay_backend/node_modules/
+
+# Backend secrets and credentials
+mockpay_backend/.env
+mockpay_backend/serviceAccountKey.json
+
+.dart_tool/
+.flutter-plugins-dependencies
+.idea/
+*-analysis.txt

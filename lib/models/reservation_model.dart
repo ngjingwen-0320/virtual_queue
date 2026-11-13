@@ -1,3 +1,4 @@
+import '../utils/phone_number_utils.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ReservationModel {
@@ -31,6 +32,10 @@ class ReservationModel {
   // CANCELLED
 
   final DateTime? createdAt;
+  final String paymentStatus;
+  final int depositAmountCents;
+  final String? paymentId;
+  bool get depositPaid => paymentStatus == 'paid';
 
   ReservationModel({
     required this.reservationId,
@@ -44,9 +49,9 @@ class ReservationModel {
     required this.restaurantName,
 
     required this.bookingType,
+
     //SELF
     //OTHER
-
     required this.guestName,
     required this.guestPhone,
 
@@ -59,18 +64,20 @@ class ReservationModel {
     required this.status,
 
     this.createdAt,
+    this.paymentStatus = 'unpaid',
+    this.depositAmountCents = 0,
+    this.paymentId,
   });
 
-  factory ReservationModel.fromMap(
-      String id,
-      Map<String, dynamic> data,
-      ) {
+  factory ReservationModel.fromMap(String id, Map<String, dynamic> data) {
     return ReservationModel(
       reservationId: id,
 
       customerId: data['customer_id'] ?? '',
       customerName: data['customer_name'] ?? '',
-      customerPhone: data['customer_phone'] ?? '',
+      customerPhone: PhoneNumberUtils.display(
+        data['customer_phone']?.toString() ?? '',
+      ),
 
       brandId: data['brand_id'] ?? '',
       restaurantId: data['restaurant_id'] ?? '',
@@ -79,23 +86,22 @@ class ReservationModel {
       bookingType: data['booking_type'] ?? 'SELF',
 
       guestName: data['guest_name'] ?? '',
-      guestPhone: data['guest_phone'] ?? '',
+      guestPhone: PhoneNumberUtils.display(
+        data['guest_phone']?.toString() ?? '',
+      ),
 
       pax: data['pax'] ?? 1,
 
-      reservationDateTime:
-      (data['reservation_datetime'] as Timestamp)
-          .toDate(),
+      reservationDateTime: (data['reservation_datetime'] as Timestamp).toDate(),
 
-      specialRequest:
-      data['special_request'] ?? '',
+      specialRequest: data['special_request'] ?? '',
 
-      status:
-      data['status'] ?? 'PENDING',
+      status: (data['status'] as String? ?? 'PENDING').toUpperCase(),
+      paymentStatus: data['payment_status'] ?? 'unpaid',
+      depositAmountCents: data['deposit_amount_cents'] ?? 0,
+      paymentId: data['mockpay_payment_id'],
 
-      createdAt:
-      (data['created_at'] as Timestamp?)
-          ?.toDate(),
+      createdAt: (data['created_at'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -118,44 +124,29 @@ class ReservationModel {
 
       'pax': pax,
 
-      'reservation_datetime':
-      Timestamp.fromDate(
-        reservationDateTime,
-      ),
+      'reservation_datetime': Timestamp.fromDate(reservationDateTime),
 
       'special_request': specialRequest,
 
       'status': status,
 
-      'created_at':
-      createdAt == null
+      'created_at': createdAt == null
           ? FieldValue.serverTimestamp()
-          : Timestamp.fromDate(
-        createdAt!,
-      ),
+          : Timestamp.fromDate(createdAt!),
     };
   }
 
-  bool get isPending =>
-      status == 'PENDING';
+  bool get isPending => status == 'PENDING';
 
-  bool get isConfirmed =>
-      status == 'CONFIRMED';
+  bool get isConfirmed => status == 'CONFIRMED';
 
-  bool get isRejected =>
-      status == 'REJECTED';
+  bool get isRejected => status == 'REJECTED';
 
-  bool get isCancelled =>
-      status == 'CANCELLED';
+  bool get isCancelled => status == 'CANCELLED';
 
   bool get canCancel {
-    final cutoff =
-    reservationDateTime.subtract(
-      const Duration(hours: 24),
-    );
+    final cutoff = reservationDateTime.subtract(const Duration(hours: 24));
 
-    return DateTime.now().isBefore(
-      cutoff,
-    );
+    return DateTime.now().isBefore(cutoff);
   }
 }

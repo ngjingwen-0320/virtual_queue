@@ -24,17 +24,81 @@ service cloud.firestore {
         && request.auth.uid == userId;
     }
 
+    match /otps/{userId} {
+      allow get, create, update, delete: if isOwner(userId)
+        && request.auth.token.email_verified == true;
+    }
+
+    function ownsBrand(brandId) {
+      return isRestaurant()
+        && get(/databases/$(database)/documents/restaurant_brands/$(brandId)).data.owner_id == request.auth.uid;
+    }
+
+    function ownsBranch(brandId, branchId) {
+      return ownsBrand(brandId)
+        && get(/databases/$(database)/documents/restaurant_brands/$(brandId)/restaurants/$(branchId)).data.owner_id == request.auth.uid;
+    }
+
+    function ownsQueue(queueId) {
+      let queue = get(/databases/$(database)/documents/queues/$(queueId)).data;
+      return ownsBranch(queue.brand_id, queue.restaurant_id);
+    }
+
+    function isValidPhone(value) {
+      return value is string
+        && value.matches('^[+]60(1[0-9]{8,9}|3[0-9]{8}|[4-9][0-9]{7})$');
+    }
+
+    function validChangedPhones() {
+      return (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['phone'])
+          || isValidPhone(request.resource.data.phone))
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['owner_phone'])
+          || isValidPhone(request.resource.data.owner_phone));
+    }
+
+    function changedOnly(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    function joinedQueue(queueId, nextNumber) {
+      let shortcut = getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/active_queue/$(queueId)).data;
+      let ticket = getAfter(/databases/$(database)/documents/queues/$(queueId)/tickets/$(shortcut.ticket_id)).data;
+      let queue = getAfter(/databases/$(database)/documents/queues/$(queueId)).data;
+      return queue.restaurant_id == queueId
+        && queue.next_available_number == nextNumber
+        && shortcut.brand_id == queue.brand_id
+        && ((!exists(/databases/$(database)/documents/queues/$(queueId)) && nextNumber == 2)
+          || (exists(/databases/$(database)/documents/queues/$(queueId))
+            && nextNumber == get(/databases/$(database)/documents/queues/$(queueId)).data.next_available_number + 1))
+        && shortcut.restaurant_id == queueId
+        && shortcut.status == 'WAITING'
+        && shortcut.ticket_number == nextNumber - 1
+        && ticket.user_id == request.auth.uid
+        && ticket.queue_number == nextNumber - 1
+        && ticket.status == 'WAITING'
+        && !exists(/databases/$(database)/documents/queues/$(queueId)/tickets/$(shortcut.ticket_id));
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId);
 
       allow create: if isSignedIn()
         && request.auth.uid == userId
-        && request.resource.data.role in ["customer", "restaurant"];
+        && request.resource.data.role in ["customer", "restaurant"]
+        && ((request.resource.data.role == 'customer' && isValidPhone(request.resource.data.phone))
+          || (request.resource.data.role == 'restaurant' && isValidPhone(request.resource.data.owner_phone)))
+        && (!('phone' in request.resource.data) || isValidPhone(request.resource.data.phone))
+        && (!('owner_phone' in request.resource.data) || isValidPhone(request.resource.data.owner_phone))
+        && request.resource.data.keys().hasOnly([
+          'created_at', 'email', 'name', 'phone', 'owner_phone',
+          'role', 'brand_id', 'restaurant_ids'
+        ]);
 
       allow update: if isOwner(userId)
-        && request.resource.data.role == resource.data.role;
+        && validChangedPhones()
+        && changedOnly(['name', 'phone', 'owner_phone', 'address', 'profile_image_url', 'updated_at']);
 
-      allow delete: if isOwner(userId);
+      allow delete: if false;
 
       match /bookmarks/{restaurantId} {
         allow read, write: if isOwner(userId);
@@ -42,70 +106,120 @@ service cloud.firestore {
     }
 
     match /users/{userId}/active_queue/{queueId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isCustomer()
+        && request.resource.data.keys().hasOnly([
+          'ticket_id', 'brand_id', 'restaurant_id', 'ticket_number', 'status', 'joined_at'
+        ])
+        && request.resource.data.joined_at == request.time
+        && joinedQueue(queueId, request.resource.data.ticket_number + 1);
+      allow update: if (
+        isOwner(userId) && isCustomer()
+        && resource.data.status in ['SERVED', 'CANCELLED', 'EXPIRED']
+        && request.resource.data.keys().hasOnly([
+          'ticket_id', 'brand_id', 'restaurant_id', 'ticket_number', 'status', 'joined_at'
+        ])
+        && request.resource.data.joined_at == request.time
+        && joinedQueue(queueId, request.resource.data.ticket_number + 1)
+      ) || (
+        ownsQueue(queueId)
+        && changedOnly(['status', 'called_at', 'served_at', 'cancelled_at', 'expired_at'])
+        && request.resource.data.status in ['CALLED', 'SERVED', 'CANCELLED', 'EXPIRED']
+      );
+      allow delete: if isOwner(userId);
     }
 
     match /queues/{queueId} {
       allow read: if isSignedIn();
-
-      allow create: if isRestaurant();
-
-      allow update, delete: if isRestaurant();
-
+      allow create: if isCustomer()
+        && request.resource.data.keys().hasOnly([
+          'brand_id', 'restaurant_id', 'current_serving', 'next_available_number'
+        ])
+        && request.resource.data.restaurant_id == queueId
+        && exists(/databases/$(database)/documents/restaurant_brands/$(request.resource.data.brand_id)/restaurants/$(queueId))
+        && request.resource.data.current_serving == 0
+        && request.resource.data.next_available_number == 2
+        && joinedQueue(queueId, 2);
+      allow update: if (
+        ownsQueue(queueId)
+        && changedOnly(['current_serving', 'next_available_number', 'last_reset_at'])
+        && request.resource.data.current_serving is int
+        && request.resource.data.current_serving >= 0
+        && request.resource.data.next_available_number is int
+        && request.resource.data.next_available_number >= 1
+      ) || (
+        isCustomer()
+        && changedOnly(['next_available_number'])
+        && request.resource.data.next_available_number == resource.data.next_available_number + 1
+        && joinedQueue(queueId, request.resource.data.next_available_number)
+      );
+      allow delete: if false;
       match /tickets/{ticketId} {
         allow read: if isSignedIn();
-
         allow create: if isCustomer()
-          && request.resource.data.user_id == request.auth.uid;
-
-        allow update: if isSignedIn()
-          && (
-            resource.data.user_id == request.auth.uid
-            || (
-              isRestaurant()
-              && resource.data.restaurant_id == request.auth.uid
-            )
-          );
-
-        allow delete: if isSignedIn()
-          && resource.data.user_id == request.auth.uid;
+          && request.resource.data.keys().hasOnly(['queue_number', 'status', 'user_id', 'created_at'])
+          && request.resource.data.user_id == request.auth.uid
+          && request.resource.data.status == 'WAITING'
+          && request.resource.data.created_at == request.time
+          && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/active_queue/$(queueId)).data.ticket_id == ticketId
+          && joinedQueue(queueId, getAfter(/databases/$(database)/documents/queues/$(queueId)).data.next_available_number);
+        allow update: if (
+          isOwner(resource.data.user_id)
+          && resource.data.status in ['WAITING', 'CALLED']
+          && changedOnly(['status', 'cancelled_at'])
+          && request.resource.data.status == 'CANCELLED'
+          && request.resource.data.cancelled_at == request.time
+        ) || (
+          ownsQueue(queueId)
+          && changedOnly(['status', 'called_at', 'served_at', 'cancelled_at', 'expired_at'])
+          && request.resource.data.status in ['CALLED', 'SERVED', 'CANCELLED', 'EXPIRED']
+        );
+        allow delete: if false;
       }
     }
 
     match /reservations/{reservationId} {
-      allow create: if isCustomer()
-        && request.resource.data.customer_id == request.auth.uid;
-
-      allow read: if isSignedIn()
-        && (
-          resource.data.customer_id == request.auth.uid
-          || resource.data.restaurant_id == request.auth.uid
-        );
-
-      allow update: if isSignedIn()
-        && (
-          resource.data.customer_id == request.auth.uid
-          || resource.data.restaurant_id == request.auth.uid
-        );
-
-      allow delete: if isSignedIn()
-        && resource.data.customer_id == request.auth.uid;
+      allow read: if isSignedIn() && (
+        resource.data.customer_id == request.auth.uid
+        || ownsBranch(resource.data.brand_id, resource.data.restaurant_id)
+      );
+      allow write: if false;
     }
 
     match /restaurant_brands/{brandId} {
       allow read: if isSignedIn();
 
-      allow write: if isRestaurant();
+      allow create: if isRestaurant()
+        && request.resource.data.owner_id == request.auth.uid
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.brand_id == brandId
+        && request.resource.data.keys().hasOnly([
+          'created_at', 'name', 'business_registration_no', 'branch_count',
+          'owner_id', 'cuisine', 'about', 'logo_url'
+        ]);
+      allow update: if ownsBrand(brandId)
+        && changedOnly(['name', 'business_registration_no', 'cuisine', 'about', 'logo_url']);
+      allow delete: if false;
 
       match /restaurants/{restaurantId} {
         allow read: if isSignedIn();
 
-        allow create: if isRestaurant()
-          && request.resource.data.owner_id == request.auth.uid;
+        allow create: if ownsBrand(brandId)
+          && request.resource.data.owner_id == request.auth.uid
+          && request.resource.data.brand_id == brandId
+          && isValidPhone(request.resource.data.phone)
+          && request.resource.data.keys().hasOnly([
+            'created_at', 'branch_name', 'address', 'brand_id', 'owner_id',
+            'phone', 'estimated_time', 'is_active', 'opening_hours', 'image_url'
+          ]);
 
-        allow update, delete: if isRestaurant()
-          && resource.data.owner_id == request.auth.uid;
+        allow update: if ownsBranch(brandId, restaurantId)
+          && validChangedPhones()
+          && changedOnly(['branch_name', 'address', 'phone', 'estimated_time', 'is_active', 'opening_hours', 'image_url']);
+        allow delete: if false;
       }
+    }
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

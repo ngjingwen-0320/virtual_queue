@@ -1,3 +1,5 @@
+import 'mockpay_checkout_page.dart';
+import 'mockpay_receipt_page.dart';
 import 'package:flutter/material.dart';
 import 'package:virtual_queue/views/customer_home_view.dart';
 import 'package:flutter/services.dart';
@@ -5,20 +7,23 @@ import '../models/reservation_model.dart';
 import '../viewmodels/reservation_viewmodel.dart';
 
 class CustomerReservationPage extends StatefulWidget {
-  const CustomerReservationPage({
-    super.key,
-  });
+  const CustomerReservationPage({super.key});
 
   @override
   State<CustomerReservationPage> createState() =>
       _CustomerReservationPageState();
 }
 
-class _CustomerReservationPageState
-    extends State<CustomerReservationPage> {
+class _CustomerReservationPageState extends State<CustomerReservationPage> {
+  final ReservationViewModel _viewModel = ReservationViewModel();
 
-  final ReservationViewModel _viewModel =
-  ReservationViewModel();
+  late final Stream<List<ReservationModel>> _reservations;
+
+  @override
+  void initState() {
+    super.initState();
+    _reservations = _viewModel.watchMyReservations();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,9 +31,17 @@ class _CustomerReservationPageState
       backgroundColor: const Color(0xFFF6FAFB),
 
       appBar: AppBar(
-        title: const Text(
-          'My Reservations',
-        ),
+        actions: [
+          IconButton(
+            tooltip: 'Payment history',
+            icon: const Icon(Icons.receipt_long),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MockPayHistoryPage()),
+            ),
+          ),
+        ],
+        title: const Text('My Reservations'),
         backgroundColor: const Color(0xFF115E59),
         foregroundColor: Colors.white,
         systemOverlayStyle: const SystemUiOverlayStyle(
@@ -42,16 +55,19 @@ class _CustomerReservationPageState
         children: [
           Expanded(
             child: StreamBuilder<List<ReservationModel>>(
-              stream: _viewModel.watchMyReservations(),
+              stream: _reservations,
 
-              builder: (context,
-                  snapshot,) {
-                if (snapshot.connectionState ==
-                    ConnectionState.waiting) {
-                  return const Center(
-                    child:
-                    CircularProgressIndicator(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Unable to load reservations: ${snapshot.error}',
+                    ),
                   );
+                }
+
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
                 }
 
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
@@ -81,7 +97,7 @@ class _CustomerReservationPageState
                       _buildNoCurrentBookingsState()
                     else
                       ...currentBookings.map(
-                            (reservation) => _buildReservationCard(reservation),
+                        (reservation) => _buildReservationCard(reservation),
                       ),
 
                     const SizedBox(height: 30),
@@ -94,7 +110,7 @@ class _CustomerReservationPageState
                       _buildNoHistoryState()
                     else
                       ...historyBookings.map(
-                            (reservation) => _buildReservationCard(reservation),
+                        (reservation) => _buildReservationCard(reservation),
                       ),
                   ],
                 );
@@ -106,7 +122,7 @@ class _CustomerReservationPageState
     );
   }
 
-  Future<void> _showCancelDialog(ReservationModel reservation,) async {
+  Future<void> _showCancelDialog(ReservationModel reservation) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -124,23 +140,18 @@ class _CustomerReservationPageState
           ),
 
           content: const Text(
-            'Are you sure you want to cancel this reservation?',
-            style: TextStyle(
-              fontFamily: 'Plus Jakarta Sans',
-            ),
+            'Cancel this reservation? Any paid simulated deposit will be refunded to the mock balance.',
+            style: TextStyle(fontFamily: 'Plus Jakarta Sans'),
           ),
 
           actions: [
-
             TextButton(
               onPressed: () {
                 Navigator.pop(context, false);
               },
               child: const Text(
                 'No',
-                style: TextStyle(
-                  color: Color(0xFF48626E),
-                ),
+                style: TextStyle(color: Color(0xFF48626E)),
               ),
             ),
 
@@ -163,7 +174,6 @@ class _CustomerReservationPageState
 
     if (confirmed == true) {
       try {
-
         if (!reservation.canCancel) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -179,30 +189,23 @@ class _CustomerReservationPageState
 
         if (!mounted) return;
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Reservation cancelled.'),
-          ),
-        );
-
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Reservation cancelled.')));
       } catch (e) {
         if (!mounted) return;
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString()),
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
   }
 
   Widget _buildCurrentBookingHeader(bool hasCurrentBookings) {
     return Row(
-      mainAxisAlignment:
-      MainAxisAlignment.spaceBetween,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-
         const Text(
           'Current Bookings',
           style: TextStyle(
@@ -216,29 +219,23 @@ class _CustomerReservationPageState
         if (hasCurrentBookings)
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor:
-              const Color(0xFF006670),
+              backgroundColor: const Color(0xFF006670),
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius:
-                BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
             onPressed: () {
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const CustomerHomeView(),
-                ),
+                MaterialPageRoute(builder: (_) => const CustomerHomeView()),
               );
             },
             icon: const Icon(Icons.add),
             label: const Text(
               'Book',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
       ],
@@ -267,12 +264,7 @@ class _CustomerReservationPageState
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-
-          Icon(
-            icon,
-            color: const Color(0xFF006670),
-            size: 18,
-          ),
+          Icon(icon, color: const Color(0xFF006670), size: 18),
 
           const SizedBox(width: 12),
 
@@ -294,9 +286,7 @@ class _CustomerReservationPageState
                   ),
                   TextSpan(
                     text: value,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: const TextStyle(fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
@@ -307,10 +297,9 @@ class _CustomerReservationPageState
     );
   }
 
-  Widget _buildReservationCard(ReservationModel reservation,) {
+  Widget _buildReservationCard(ReservationModel reservation) {
     final bool canCancel =
-        reservation.status == 'PENDING' ||
-            reservation.status == 'CONFIRMED';
+        reservation.status == 'PENDING' || reservation.status == 'CONFIRMED';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 18),
@@ -318,9 +307,7 @@ class _CustomerReservationPageState
       decoration: BoxDecoration(
         color: const Color(0xFFF0F4F5),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-        ),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.06),
@@ -333,7 +320,6 @@ class _CustomerReservationPageState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-
           // Restaurant + Status
           Row(
             children: [
@@ -391,19 +377,54 @@ class _CustomerReservationPageState
             icon: Icons.calendar_today_outlined,
             title: 'Date',
             value:
-            '${reservation.reservationDateTime.day}/${reservation.reservationDateTime.month}/${reservation.reservationDateTime.year}',
+                '${reservation.reservationDateTime.day}/${reservation.reservationDateTime.month}/${reservation.reservationDateTime.year}',
           ),
 
           _buildInfoRow(
             icon: Icons.access_time_outlined,
             title: 'Time',
             value:
-            '${reservation.reservationDateTime.hour}:${reservation.reservationDateTime.minute.toString().padLeft(2, '0')}',
+                '${reservation.reservationDateTime.hour}:${reservation.reservationDateTime.minute.toString().padLeft(2, '0')}',
           ),
+
+          _buildInfoRow(
+            icon: Icons.payments_outlined,
+            title: 'Deposit',
+            value:
+                'RM${(reservation.depositAmountCents / 100).toStringAsFixed(2)} · ${reservation.paymentStatus.toUpperCase()}',
+          ),
+          if (reservation.paymentId != null)
+            TextButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      MockPayReceiptPage(paymentId: reservation.paymentId!),
+                ),
+              ),
+              icon: const Icon(Icons.receipt_long),
+              label: const Text('View payment details'),
+            ),
+          if ((reservation.status == 'PENDING' ||
+                  reservation.status == 'CONFIRMED') &&
+              !reservation.depositPaid &&
+              reservation.paymentStatus != 'refunded')
+            FilledButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => MockPayCheckoutPage(
+                    reservationId: reservation.reservationId,
+                    restaurantName: reservation.restaurantName,
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.account_balance),
+              label: const Text('Pay deposit'),
+            ),
 
           if (reservation.status == 'PENDING' ||
               reservation.status == 'CONFIRMED') ...[
-
             const SizedBox(height: 24),
 
             Align(
@@ -439,7 +460,6 @@ class _CustomerReservationPageState
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-
             const Icon(
               Icons.event_available_rounded,
               size: 70,
@@ -486,17 +506,13 @@ class _CustomerReservationPageState
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const CustomerHomeView(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const CustomerHomeView()),
                   );
                 },
 
                 child: const Text(
                   'Book Now',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -513,7 +529,6 @@ class _CustomerReservationPageState
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-
             const Icon(
               Icons.restaurant_rounded,
               size: 70,
@@ -560,17 +575,13 @@ class _CustomerReservationPageState
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const CustomerHomeView(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const CustomerHomeView()),
                   );
                 },
 
                 child: const Text(
                   'Book Again',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -583,16 +594,11 @@ class _CustomerReservationPageState
   Widget _buildNoCurrentBookingsState() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        vertical: 28,
-        horizontal: 20,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-        ),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Column(
         children: [
@@ -618,9 +624,7 @@ class _CustomerReservationPageState
           const Text(
             'Ready for your next meal? Book another table anytime.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Color(0xFF64748B),
-            ),
+            style: TextStyle(color: Color(0xFF64748B)),
           ),
 
           const SizedBox(height: 20),
@@ -633,9 +637,7 @@ class _CustomerReservationPageState
             onPressed: () {
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const CustomerHomeView(),
-                ),
+                MaterialPageRoute(builder: (_) => const CustomerHomeView()),
               );
             },
             icon: const Icon(Icons.add),
@@ -649,16 +651,11 @@ class _CustomerReservationPageState
   Widget _buildNoHistoryState() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        vertical: 28,
-        horizontal: 20,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-        ),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Column(
         children: [
@@ -684,9 +681,7 @@ class _CustomerReservationPageState
           const Text(
             'Cancelled reservations will appear here.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Color(0xFF64748B),
-            ),
+            style: TextStyle(color: Color(0xFF64748B)),
           ),
         ],
       ),

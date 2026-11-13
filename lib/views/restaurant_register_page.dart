@@ -1,3 +1,4 @@
+import '../widgets/malaysian_phone_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inset_shadow/flutter_inset_shadow.dart' as inset;
@@ -13,7 +14,6 @@ class RestaurantRegisterPage extends StatefulWidget {
 }
 
 class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
-
   int currentStep = 1;
 
   final branchCountController = TextEditingController(text: '1');
@@ -51,6 +51,15 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
     }
   }
 
+  @override
+  void initState() {
+    super.initState();
+
+    passwordController.addListener(() {
+      setState(() {});
+    });
+  }
+
   Future<void> registerRestaurant() async {
     final branches = <Map<String, String>>[];
 
@@ -60,7 +69,7 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
         'address': restaurantAddressController.text.trim(),
       });
     } else {
-      for (int i = 0; i < branchCount; i++){
+      for (int i = 0; i < branchCount; i++) {
         branches.add({
           'branch_name': branchNameControllers[i].text.trim(),
           'address': branchAddressControllers[i].text.trim(),
@@ -83,15 +92,86 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
 
     if (profile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(viewModel.errorMessage ?? 'Registration failed')),
+        SnackBar(
+          content: Text(viewModel.errorMessage ?? 'Registration failed'),
+        ),
       );
       return;
     }
 
+    final messenger = ScaffoldMessenger.of(context);
+
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(
-        builder: (_) => LoginPage(),
+      MaterialPageRoute(builder: (_) => LoginPage()),
+    );
+
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Registration successful!'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Widget passwordRequirement(String text, bool isValid) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          isValid ? Icons.check_circle_outline : Icons.cancel_outlined,
+          color: isValid ? Colors.green : Colors.grey,
+          size: 15,
+        ),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            text,
+            style: TextStyle(
+              color: isValid ? Colors.green : Colors.grey,
+              fontSize: 11,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget buildPasswordRequirements() {
+    final password = passwordController.text;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 15,
+            runSpacing: 8,
+            children: [
+              passwordRequirement('Min. 8 characters', password.length >= 8),
+              passwordRequirement(
+                'Include lowercase letter',
+                RegExp(r'[a-z]').hasMatch(password),
+              ),
+              passwordRequirement(
+                'Include uppercase letter',
+                RegExp(r'[A-Z]').hasMatch(password),
+              ),
+              passwordRequirement(
+                'Include number',
+                RegExp(r'[0-9]').hasMatch(password),
+              ),
+              passwordRequirement(
+                'Include special character',
+                RegExp(
+                  r'''[\^$*.\[\]{}()?"!@#%&/\\,><':;|_~]''',
+                ).hasMatch(password),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -139,7 +219,7 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
   }
 
   @override
-  Widget build (BuildContext context) {
+  Widget build(BuildContext context) {
     return Container(
       color: Color(0xFFF8FDFD),
       child: SingleChildScrollView(
@@ -149,10 +229,7 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
           children: [
             Text(
               'Register as Restaurant',
-              style: TextStyle(
-                fontSize: 23,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 20),
 
@@ -164,17 +241,13 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
             if (currentStep == 2) ownerDetailsForm(),
           ],
         ),
-      )
+      ),
     );
   }
 
   Widget buildStepIndicator() {
     return Row(
-      children: [
-        buildStepCircle(1),
-        buildStepLine(),
-        buildStepCircle(2),
-      ],
+      children: [buildStepCircle(1), buildStepLine(), buildStepCircle(2)],
     );
   }
 
@@ -187,7 +260,7 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
       child: Text(
         step.toString(),
         style: TextStyle(
-          color: isActive? Colors.white : Colors.black54,
+          color: isActive ? Colors.white : Colors.black54,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -209,7 +282,6 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-
         SizedBox(height: 10),
 
         Text(
@@ -226,7 +298,7 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
 
         buildLabel('Number of Branches'),
 
-        SizedBox(height:10),
+        SizedBox(height: 10),
 
         Container(
           decoration: inset.BoxDecoration(
@@ -244,15 +316,11 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
           child: TextField(
             controller: branchCountController,
             keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-            ],
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             onChanged: updateBranchForms,
             decoration: InputDecoration(
               hintText: 'e.g. 1',
-              hintStyle: TextStyle(
-                color: Colors.grey,
-              ),
+              hintStyle: TextStyle(color: Colors.grey),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(40),
                 borderSide: BorderSide.none,
@@ -330,10 +398,7 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
           controller: restaurantAddressController,
         ),
         buildLabel('Branch/Area Name'),
-        buildTextField(
-          'e.g. Georgetown',
-          controller: restaurantAreaController,
-        ),
+        buildTextField('e.g. Georgetown', controller: restaurantAreaController),
       ],
     );
   }
@@ -384,7 +449,6 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-
         SizedBox(height: 10),
 
         Text(
@@ -400,22 +464,13 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
         SizedBox(height: 20),
 
         buildLabel('Owner Name'),
-        buildTextField(
-          'John Doe',
-          controller: ownerNameController,
-        ),
+        buildTextField('John Doe', controller: ownerNameController),
 
         buildLabel('Owner Email'),
-        buildTextField(
-          'example@gmail.com',
-          controller: ownerEmailController,
-        ),
+        buildTextField('example@gmail.com', controller: ownerEmailController),
 
         buildLabel('Phone Number'),
-        buildTextField(
-          '+60XX-XXXXXXX',
-          controller: ownerPhoneController,
-        ),
+        buildTextField('+60XX-XXXXXXX', controller: ownerPhoneController),
 
         buildLabel('Password'),
         buildTextField(
@@ -435,6 +490,9 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
           ),
         ),
 
+        buildPasswordRequirements(),
+        const SizedBox(height: 10),
+
         buildLabel('Password'),
         buildTextField(
           'confirm password',
@@ -442,7 +500,9 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
           controller: confirmPasswordController,
           suffixIcon: IconButton(
             icon: Icon(
-              isConfirmPasswordVisible ? Icons.visibility_off : Icons.visibility,
+              isConfirmPasswordVisible
+                  ? Icons.visibility_off
+                  : Icons.visibility,
               color: Colors.grey,
             ),
             onPressed: () {
@@ -459,9 +519,7 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
           child: RichText(
             text: TextSpan(
               text: "Already have an account? ",
-              style: TextStyle(
-                color: Colors.black,
-              ),
+              style: TextStyle(color: Colors.black),
               children: [
                 TextSpan(
                   text: 'Login here',
@@ -473,9 +531,7 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
                     ..onTap = () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (cotext) => LoginPage(),
-                        ),
+                        MaterialPageRoute(builder: (cotext) => LoginPage()),
                       );
                     },
                 ),
@@ -488,7 +544,6 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
 
         Row(
           children: [
-
             Expanded(
               child: InkWell(
                 onTap: () {
@@ -563,20 +618,26 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
   Widget buildLabel(String text) {
     return Text(
       text,
-      style: TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight(550),
-      ),
+      style: TextStyle(fontSize: 18, fontWeight: FontWeight(550)),
     );
   }
 
   Widget buildTextField(
-      String hintText, {
-      TextEditingController? controller,
-      bool obscureText = false,
-      int maxLines = 1,
-      Widget? suffixIcon,
+    String hintText, {
+    TextEditingController? controller,
+    bool obscureText = false,
+    int maxLines = 1,
+    Widget? suffixIcon,
   }) {
+    if (controller == ownerPhoneController) {
+      return Column(
+        children: [
+          const SizedBox(height: 10),
+          MalaysianPhoneField(controller: ownerPhoneController),
+          const SizedBox(height: 20),
+        ],
+      );
+    }
     final double radius = maxLines > 1 ? 25 : 40;
 
     return Column(
@@ -602,9 +663,7 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
             decoration: InputDecoration(
               hintText: hintText,
               suffixIcon: suffixIcon,
-              hintStyle: TextStyle(
-                color: Colors.grey,
-              ),
+              hintStyle: TextStyle(color: Colors.grey),
               filled: false,
               fillColor: Color(0xFFFFFFFF),
               border: OutlineInputBorder(
@@ -618,5 +677,4 @@ class _RestaurantRegisterPageState extends State<RestaurantRegisterPage> {
       ],
     );
   }
-
 }

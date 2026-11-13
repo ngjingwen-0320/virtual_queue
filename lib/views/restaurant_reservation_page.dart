@@ -20,28 +20,44 @@ class RestaurantReservationPage extends StatefulWidget {
   });
 
   @override
-  State<RestaurantReservationPage> createState() => _RestaurantReservationPageState();
+  State<RestaurantReservationPage> createState() =>
+      _RestaurantReservationPageState();
 }
 
-class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
-
+class _RestaurantReservationPageState extends State<RestaurantReservationPage> {
   final viewmodel = RestaurantProfileViewModel();
   final ReservationViewModel reservationViewModel = ReservationViewModel();
   // bool _showActive = true;
   int selectedTab = 0;
 
   late String selectedRestaurantId;
+  late final Stream<RestaurantBrandModel> _brandStream;
+  late Stream<RestaurantModel> _branchStream;
+  late Stream<List<ReservationModel>> _reservationsStream;
+
+  void _loadBranchStreams() {
+    _branchStream = viewmodel.watchRestaurantBranch(
+      widget.restaurantBrandId,
+      selectedRestaurantId,
+    );
+    _reservationsStream = reservationViewModel.watchRestaurantReservations(
+      selectedRestaurantId,
+      widget.restaurantBrandId,
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     selectedRestaurantId = widget.restaurantId;
+    _brandStream = viewmodel.watchRestaurantBrand(widget.restaurantBrandId);
+    _loadBranchStreams();
   }
 
   bool _isProfileSetupComplete(
-      RestaurantBrandModel brand,
-      RestaurantModel restaurant,
-      ) {
+    RestaurantBrandModel brand,
+    RestaurantModel restaurant,
+  ) {
     return brand.cuisine.isNotEmpty &&
         brand.about.isNotEmpty &&
         brand.logoUrl.isNotEmpty &&
@@ -52,7 +68,7 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
   }
 
   @override
-  Widget build (BuildContext context) {
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Color(0xFFF6FAFB),
       body: Column(
@@ -60,8 +76,15 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
           _buildHeader(),
           Expanded(
             child: StreamBuilder<RestaurantBrandModel>(
-              stream: viewmodel.watchRestaurantBrand(widget.restaurantBrandId),
+              stream: _brandStream,
               builder: (context, brandSnapshot) {
+                if (brandSnapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Unable to load reservation data: ${brandSnapshot.error}',
+                    ),
+                  );
+                }
                 if (!brandSnapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
@@ -69,11 +92,15 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
                 final brand = brandSnapshot.data!;
 
                 return StreamBuilder<RestaurantModel>(
-                  stream: viewmodel.watchRestaurantBranch(
-                    widget.restaurantBrandId,
-                    selectedRestaurantId,
-                  ),
+                  stream: _branchStream,
                   builder: (context, restaurantSnapshot) {
+                    if (restaurantSnapshot.hasError) {
+                      return Center(
+                        child: Text(
+                          'Unable to load reservation data: ${restaurantSnapshot.error}',
+                        ),
+                      );
+                    }
                     if (!restaurantSnapshot.hasData) {
                       return const Center(child: CircularProgressIndicator());
                     }
@@ -85,42 +112,44 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
                     }
 
                     return StreamBuilder<List<ReservationModel>>(
-                      stream: reservationViewModel
-                          .watchRestaurantReservations(
-                        selectedRestaurantId,
-                      ),
+                      stream: _reservationsStream,
                       builder: (context, reservationSnapshot) {
-
+                        if (reservationSnapshot.hasError) {
+                          return Center(
+                            child: Text(
+                              'Unable to load reservation data: ${reservationSnapshot.error}',
+                            ),
+                          );
+                        }
                         if (!reservationSnapshot.hasData) {
                           return const Center(
                             child: CircularProgressIndicator(),
                           );
                         }
 
-                        final reservations =
-                        reservationSnapshot.data!;
+                        final reservations = reservationSnapshot.data!;
 
-                        final now = DateTime.now();
-                        
-                        final activeReservations = reservations.where((reservation) {
+                        final activeReservations = reservations.where((
+                          reservation,
+                        ) {
                           return reservation.status == 'PENDING' ||
                               reservation.status == 'CONFIRMED';
                         }).toList();
 
-                        final historyReservations = reservations.where((reservation) {
+                        final historyReservations = reservations.where((
+                          reservation,
+                        ) {
                           return reservation.status == 'REJECTED' ||
                               reservation.status == 'CANCELLED';
                         }).toList();
 
                         return Column(
                           children: [
-
                             const SizedBox(height: 15),
 
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
-
                                 _buildTabButton(
                                   title: "Active",
                                   selected: selectedTab == 0,
@@ -148,37 +177,38 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
                             Expanded(
                               child: selectedTab == 0
                                   ? activeReservations.isEmpty
-                                  ? _buildEmptyReservationState(
-                                icon: Icons.event_busy_rounded,
-                                title: 'No Active Reservations',
-                                subtitle:
-                                'There are currently no pending or confirmed reservations.',
-                              )
-                                  : ListView.builder(
-                                padding: const EdgeInsets.all(16),
-                                itemCount: activeReservations.length,
-                                itemBuilder: (context, index) {
-                                  return _buildReservationCard(
-                                    activeReservations[index],
-                                  );
-                                },
-                              )
+                                        ? _buildEmptyReservationState(
+                                            icon: Icons.event_busy_rounded,
+                                            title: 'No Active Reservations',
+                                            subtitle:
+                                                'There are currently no pending or confirmed reservations.',
+                                          )
+                                        : ListView.builder(
+                                            padding: const EdgeInsets.all(16),
+                                            itemCount:
+                                                activeReservations.length,
+                                            itemBuilder: (context, index) {
+                                              return _buildReservationCard(
+                                                activeReservations[index],
+                                              );
+                                            },
+                                          )
                                   : historyReservations.isEmpty
                                   ? _buildEmptyReservationState(
-                                icon: Icons.history_rounded,
-                                title: 'No Reservation History',
-                                subtitle:
-                                'Rejected and cancelled reservations will appear here.',
-                              )
+                                      icon: Icons.history_rounded,
+                                      title: 'No Reservation History',
+                                      subtitle:
+                                          'Rejected and cancelled reservations will appear here.',
+                                    )
                                   : ListView.builder(
-                                padding: const EdgeInsets.all(16),
-                                itemCount: historyReservations.length,
-                                itemBuilder: (context, index) {
-                                  return _buildReservationCard(
-                                    historyReservations[index],
-                                  );
-                                },
-                              ),
+                                      padding: const EdgeInsets.all(16),
+                                      itemCount: historyReservations.length,
+                                      itemBuilder: (context, index) {
+                                        return _buildReservationCard(
+                                          historyReservations[index],
+                                        );
+                                      },
+                                    ),
                             ),
                           ],
                         );
@@ -194,9 +224,7 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
       bottomNavigationBar: Container(
         height: 100,
         padding: const EdgeInsets.all(10),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-        ),
+        decoration: const BoxDecoration(color: Colors.white),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
@@ -259,12 +287,7 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-
-            Icon(
-              icon,
-              size: 70,
-              color: const Color(0xFF006670),
-            ),
+            Icon(icon, size: 70, color: const Color(0xFF006670)),
 
             const SizedBox(height: 16),
 
@@ -307,9 +330,7 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
                   onPressed: onPressed,
                   child: Text(
                     buttonText,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -342,16 +363,20 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
             Icon(
               icon,
               size: 26,
-              color: isActive ? const Color(0xFF115E59) : const Color(0xFF64748B),
+              color: isActive
+                  ? const Color(0xFF115E59)
+                  : const Color(0xFF64748B),
             ),
             const SizedBox(height: 2),
             Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: isActive ? const Color(0xFF115E59) : const Color(0xFF64748B),
-                )
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: isActive
+                    ? const Color(0xFF115E59)
+                    : const Color(0xFF64748B),
+              ),
             ),
           ],
         ),
@@ -366,27 +391,17 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.storefront_outlined,
-              size: 60,
-              color: Color(0xFF006670),
-            ),
+            Icon(Icons.storefront_outlined, size: 60, color: Color(0xFF006670)),
             SizedBox(height: 18),
             Text(
               'Profile setup required',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 10),
             Text(
               'Reservation will be available once you complete your restaurant profile setup. Please go to Profile to finish setup.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xFF64748B),
-                height: 1.4,
-              ),
+              style: TextStyle(color: Color(0xFF64748B), height: 1.4),
             ),
           ],
         ),
@@ -396,9 +411,9 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
 
   Widget _buildHeader() {
     return StreamBuilder<RestaurantBrandModel>(
-      stream: viewmodel.watchRestaurantBrand(widget.restaurantBrandId),
-      builder: (context, snapshot){
-        if(!snapshot.hasData){
+      stream: _brandStream,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
           return Container(
             height: 55,
             width: 55,
@@ -406,10 +421,7 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
               color: Colors.white,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(
-              Icons.restaurant,
-              color: Color(0xFF006670),
-            ),
+            child: const Icon(Icons.restaurant, color: Color(0xFF006670)),
           );
         }
 
@@ -417,12 +429,7 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
         return Container(
           height: 140,
           width: double.infinity,
-          padding: EdgeInsets.only(
-            top: 70,
-            bottom: 20,
-            left: 20,
-            right: 20,
-          ),
+          padding: EdgeInsets.only(top: 70, bottom: 20, left: 20, right: 20),
           color: Color(0xFF006670),
           child: Row(
             children: [
@@ -435,31 +442,31 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
                 clipBehavior: Clip.antiAlias,
                 child: brand.logoUrl.isEmpty
                     ? Center(
-                  child: Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.restaurant,
-                      color: Color(0xFF006670),
-                      size: 30,
-                    ),
-                  ),
-                )
+                        child: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.restaurant,
+                            color: Color(0xFF006670),
+                            size: 30,
+                          ),
+                        ),
+                      )
                     : Image.network(
-                  brand.logoUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Icon(
-                      Icons.restaurant,
-                      color: Color(0xFF006670),
-                      size: 30,
-                    );
-                  },
-                ),
+                        brand.logoUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.restaurant,
+                            color: Color(0xFF006670),
+                            size: 30,
+                          );
+                        },
+                      ),
               ),
               SizedBox(width: 10),
               Expanded(
@@ -468,7 +475,7 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     StreamBuilder<RestaurantBrandModel>(
-                      stream: viewmodel.watchRestaurantBrand(widget.restaurantBrandId),
+                      stream: _brandStream,
                       builder: (context, snapshot) {
                         if (!snapshot.hasData) {
                           return const Text(
@@ -493,40 +500,40 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
                     Row(
                       children: [
                         Icon(
-                            Icons.location_on_outlined,
-                            color: Colors.white,
-                            size: 12
+                          Icons.location_on_outlined,
+                          color: Colors.white,
+                          size: 12,
                         ),
                         SizedBox(width: 2),
                         Expanded(
-                          child: StreamBuilder<RestaurantModel> (
-                              stream: viewmodel.watchRestaurantBranch(
-                                widget.restaurantBrandId,
-                                selectedRestaurantId,
-                              ),
-                              builder: (context, snapshot) {
-                                if (!snapshot.hasData) {
-                                  return const Text(
-                                    '',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                    ),
-                                  );
-                                }
-                                final restaurant = snapshot.data!;
-                                return Text(
-                                  restaurant.branchName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
+                          child: StreamBuilder<RestaurantModel>(
+                            stream: viewmodel.watchRestaurantBranch(
+                              widget.restaurantBrandId,
+                              selectedRestaurantId,
+                            ),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData) {
+                                return const Text(
+                                  '',
+                                  style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: 13,
+                                    fontSize: 10,
                                   ),
                                 );
                               }
+                              final restaurant = snapshot.data!;
+                              return Text(
+                                restaurant.branchName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                ),
+                              );
+                            },
                           ),
-                        )
+                        ),
                       ],
                     ),
                   ],
@@ -535,96 +542,97 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
               SizedBox(width: 8),
               widget.restaurantIds.length > 1
                   ? PopupMenuButton<String>(
-                color: Colors.white,
-                onSelected: (restaurantId){
-                  setState(() {
-                    selectedRestaurantId = restaurantId;
-                  });
-                },
-                itemBuilder: (context){
-                  return widget.restaurantIds.map((restaurantId){
-                    return PopupMenuItem<String>(
-                      value: restaurantId,
-                      child: StreamBuilder<RestaurantModel>(
-                        stream: viewmodel.watchRestaurantBranch(
-                          widget.restaurantBrandId,
-                          restaurantId,
-                        ),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData){
-                            return Text(restaurantId);
-                          }
-                          final restaurant = snapshot.data!;
+                      color: Colors.white,
+                      onSelected: (restaurantId) {
+                        setState(() {
+                          selectedRestaurantId = restaurantId;
+                          _loadBranchStreams();
+                        });
+                      },
+                      itemBuilder: (context) {
+                        return widget.restaurantIds.map((restaurantId) {
+                          return PopupMenuItem<String>(
+                            value: restaurantId,
+                            child: StreamBuilder<RestaurantModel>(
+                              stream: viewmodel.watchRestaurantBranch(
+                                widget.restaurantBrandId,
+                                restaurantId,
+                              ),
+                              builder: (context, snapshot) {
+                                if (!snapshot.hasData) {
+                                  return Text(restaurantId);
+                                }
+                                final restaurant = snapshot.data!;
 
-                          return Text(restaurant.branchName);
-                        },
-                      ),
-                    );
-                  }).toList();
-                },
-                child: Container(
-                  height: 30,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: Color(0xFFF0F4F5),
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.25),
-                        blurRadius: 4,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        '${widget.restaurantIds.length} branch',
-                        style: const TextStyle(
-                          color: Color(0xFF006670),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                                return Text(restaurant.branchName);
+                              },
+                            ),
+                          );
+                        }).toList();
+                      },
+                      child: Container(
+                        height: 30,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Color(0xFFF0F4F5),
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.25),
+                              blurRadius: 4,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Text(
+                              '${widget.restaurantIds.length} branch',
+                              style: const TextStyle(
+                                color: Color(0xFF006670),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.keyboard_arrow_down,
+                              color: Color(0xFF006670),
+                              size: 18,
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      const Icon(
-                        Icons.keyboard_arrow_down,
-                        color: Color(0xFF006670),
-                        size: 18,
-                      ),
-                    ],
-                  ),
-                ),
-              )
+                    )
                   : Container(
-                height: 30,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: Color(0xFFF0F4F5),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.25),
-                      blurRadius: 4,
-                      offset: const Offset(0, 4),
+                      height: 30,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Color(0xFFF0F4F5),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 4,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${widget.restaurantIds.length} branch',
+                          style: const TextStyle(
+                            color: Color(0xFF006670),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
                     ),
-                  ],
-                ),
-                child: Center(
-                  child: Text(
-                    '${widget.restaurantIds.length} branch',
-                    style: const TextStyle(
-                      color: Color(0xFF006670),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         );
-      }
+      },
     );
   }
 
@@ -638,12 +646,7 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-
-          Icon(
-            icon,
-            color: const Color(0xFF006670),
-            size: 22,
-          ),
+          Icon(icon, color: const Color(0xFF006670), size: 22),
 
           const SizedBox(width: 12),
 
@@ -666,9 +669,7 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
                   ),
                   TextSpan(
                     text: value,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: const TextStyle(fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
@@ -688,14 +689,10 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 8,
-          vertical: 6,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-
             Text(
               title,
               style: TextStyle(
@@ -714,9 +711,7 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
               height: 3,
               width: 55,
               decoration: BoxDecoration(
-                color: selected
-                    ? const Color(0xFF006670)
-                    : Colors.transparent,
+                color: selected ? const Color(0xFF006670) : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
@@ -726,10 +721,7 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
     );
   }
 
-  Widget _buildReservationCard(
-      ReservationModel reservation,
-      ) {
-
+  Widget _buildReservationCard(ReservationModel reservation) {
     Color statusColor = Colors.grey;
 
     if (reservation.status == 'PENDING') {
@@ -750,9 +742,7 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
       decoration: BoxDecoration(
         color: const Color(0xFFF0F4F5),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-        ),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.06),
@@ -766,14 +756,11 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
         padding: const EdgeInsets.all(16),
 
         child: Column(
-          crossAxisAlignment:
-          CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
 
           children: [
-
             Row(
               children: [
-
                 Expanded(
                   child: Text(
                     reservation.customerName,
@@ -818,16 +805,22 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
               icon: Icons.calendar_today_outlined,
               title: 'Date',
               value:
-              '${reservation.reservationDateTime.day}/${reservation.reservationDateTime.month}/${reservation.reservationDateTime.year}',
+                  '${reservation.reservationDateTime.day}/${reservation.reservationDateTime.month}/${reservation.reservationDateTime.year}',
             ),
 
             _buildInfoRow(
               icon: Icons.access_time_outlined,
               title: 'Time',
               value:
-              '${reservation.reservationDateTime.hour}:${reservation.reservationDateTime.minute.toString().padLeft(2, '0')}',
+                  '${reservation.reservationDateTime.hour}:${reservation.reservationDateTime.minute.toString().padLeft(2, '0')}',
             ),
 
+            _buildInfoRow(
+              icon: Icons.payments_outlined,
+              title: 'Deposit',
+              value:
+                  'RM${(reservation.depositAmountCents / 100).toStringAsFixed(2)} · ${reservation.paymentStatus.toUpperCase()}',
+            ),
             if (reservation.status == 'PENDING') ...[
               const SizedBox(height: 16),
               Row(
@@ -838,11 +831,21 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
                         backgroundColor: const Color(0xFF006670),
                         foregroundColor: Colors.white,
                       ),
-                      onPressed: () async {
-                        await reservationViewModel.approveReservation(
-                          reservation.reservationId,
-                        );
-                      },
+                      onPressed: !reservation.depositPaid
+                          ? null
+                          : () async {
+                              final messenger = ScaffoldMessenger.of(context);
+                              try {
+                                await reservationViewModel.approveReservation(
+                                  reservation.reservationId,
+                                );
+                              } catch (error) {
+                                if (!mounted) return;
+                                messenger.showSnackBar(
+                                  SnackBar(content: Text(error.toString())),
+                                );
+                              }
+                            },
                       icon: const Icon(
                         Icons.check_circle_outline,
                         size: 20,
@@ -867,19 +870,22 @@ class _RestaurantReservationPageState extends State<RestaurantReservationPage>{
                         foregroundColor: Colors.redAccent,
                       ),
                       onPressed: () async {
-                        await reservationViewModel.rejectReservation(
-                          reservation.reservationId,
-                        );
+                        final messenger = ScaffoldMessenger.of(context);
+                        try {
+                          await reservationViewModel.rejectReservation(
+                            reservation.reservationId,
+                          );
+                        } catch (error) {
+                          if (!mounted) return;
+                          messenger.showSnackBar(
+                            SnackBar(content: Text(error.toString())),
+                          );
+                        }
                       },
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        size: 20,
-                      ),
+                      icon: const Icon(Icons.close_rounded, size: 20),
                       label: const Text(
                         'Reject',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
