@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:virtual_queue/services/app_logger.dart';
 // import 'firebase_options.dart';
 import 'views/login_page.dart';
 // import 'views/restaurant_card_page.dart';
@@ -10,6 +11,10 @@ import 'views/login_page.dart';
 Future<void> main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 🔐 Initialize centralized logging before the application starts.
+  // Controls log formatting, severity levels, and Debug-mode output.
+  AppLogger.initialize();
 
   await Firebase.initializeApp();
 

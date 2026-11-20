@@ -2,7 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; 
-import '../models/user_profile.dart'; 
+import '../models/user_profile.dart';
+import 'package:virtual_queue/services/app_logger.dart';
 
 class UserProfileViewModel extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -33,8 +34,12 @@ class UserProfileViewModel extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      debugPrint('📥 [UserProfileVM] Fetching custom profile data for UID: ${currentUser.uid}');
-      
+      // 📥 Track profile retrieval without recording the user's UID.
+      AppLogger.info(
+        'UserProfileVM',
+        '📥 Fetching custom profile data',
+      );
+
       final DocumentSnapshot doc = await _firestore
           .collection('users')
           .doc(currentUser.uid)
@@ -51,15 +56,27 @@ class UserProfileViewModel extends ChangeNotifier {
           currentUser.uid, 
           rawData,
         );
-        debugPrint('✅ [UserProfileVM] Full user profile map parsed! Data keys found: ${_allFieldsMap.keys.toList()}');
+        // ✅ Confirm profile data was loaded without exposing its contents.
+        AppLogger.info(
+          'UserProfileVM',
+          '✅ User profile data loaded successfully',
+        );
       } else {
-        debugPrint('⚠️ [UserProfileVM] No custom profile document found in /users collection.');
+        // ⚠️ Record that no matching profile document was found.
+        AppLogger.warning(
+          'UserProfileVM',
+          '⚠️ No custom profile document found in users collection',
+        );
       }
 
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      debugPrint('❌ [UserProfileVM] Error pulling profile document: $e');
+      // ❌ Record profile retrieval errors without displaying exception details.
+      AppLogger.error(
+        'UserProfileVM',
+        '❌ Error pulling profile document',
+      );
       _isLoading = false;
       notifyListeners();
     }
@@ -74,7 +91,11 @@ class UserProfileViewModel extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      debugPrint('📤 [UserProfileVM] Saving customer payload data to Firestore: $updatedDataPayload');
+      // 📤 Track profile updates without printing customer information.
+      AppLogger.info(
+        'UserProfileVM',
+        '📤 Saving customer profile changes',
+      );
 
       // 1. Update document in Firestore using merge:true to avoid clearing unselected background data values
       await _firestore
@@ -92,7 +113,11 @@ class UserProfileViewModel extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      debugPrint('❌ [UserProfileVM] Failed to save edited customer details: $e');
+      // ❌ Record unsuccessful profile updates without exposing sensitive data.
+      AppLogger.error(
+        'UserProfileVM',
+        '❌ Failed to save edited customer details',
+      );
       _isLoading = false;
       notifyListeners();
       return false;
@@ -118,7 +143,11 @@ class UserProfileViewModel extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      debugPrint('🚪 [UserProfileVM] Erasing authenticated session state token...');
+      // 🚪 Record the start of the logout process without logging session tokens.
+      AppLogger.info(
+        'UserProfileVM',
+        '🚪 Erasing authenticated session state',
+      );
       await _auth.signOut();
 
       _cachedProfile = null; 
@@ -127,7 +156,11 @@ class UserProfileViewModel extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      debugPrint('❌ [UserProfileVM] Failed to logout session: $e');
+      // ❌ Record unsuccessful logout attempts without exposing error details.
+      AppLogger.error(
+        'UserProfileVM',
+        '❌ Failed to logout session',
+      );
       _isLoading = false;
       notifyListeners();
       return false;

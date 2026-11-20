@@ -1,3 +1,4 @@
+import '../widgets/malaysian_phone_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inset_shadow/flutter_inset_shadow.dart' as inset;
 import 'package:flutter/gestures.dart';
@@ -12,7 +13,6 @@ class CustomerRegisterPage extends StatefulWidget {
 }
 
 class _CustomerRegisterPageState extends State<CustomerRegisterPage> {
-
   final viewModel = RegisterViewmodel();
 
   final nameController = TextEditingController();
@@ -22,6 +22,15 @@ class _CustomerRegisterPageState extends State<CustomerRegisterPage> {
   final confirmPasswordController = TextEditingController();
   bool isPasswordVisible = false;
   bool isConfirmPasswordVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    passwordController.addListener(() {
+      setState(() {});
+    });
+  }
 
   Future<void> registerCustomer() async {
     final profile = await viewModel.registerCustomer(
@@ -37,18 +46,88 @@ class _CustomerRegisterPageState extends State<CustomerRegisterPage> {
 
     if (profile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(viewModel.errorMessage ?? 'Registration failed')),
+        SnackBar(
+          content: Text(viewModel.errorMessage ?? 'Registration failed'),
+        ),
       );
       return;
     }
 
+    final messenger = ScaffoldMessenger.of(context);
+
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(
-        builder: (_) => LoginPage(),
-      ),
+      MaterialPageRoute(builder: (_) => LoginPage()),
     );
 
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Registration successful!'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Widget passwordRequirement(String text, bool isValid) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          isValid ? Icons.check_circle_outline : Icons.cancel_outlined,
+          color: isValid ? Colors.green : Colors.grey,
+          size: 15,
+        ),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            text,
+            style: TextStyle(
+              color: isValid ? Colors.green : Colors.grey,
+              fontSize: 11,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget buildPasswordRequirements() {
+    final password = passwordController.text;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 15,
+            runSpacing: 8,
+            children: [
+              passwordRequirement('Min. 8 characters', password.length >= 8),
+              passwordRequirement(
+                'Include lowercase letter',
+                RegExp(r'[a-z]').hasMatch(password),
+              ),
+              passwordRequirement(
+                'Include uppercase letter',
+                RegExp(r'[A-Z]').hasMatch(password),
+              ),
+              passwordRequirement(
+                'Include number',
+                RegExp(r'[0-9]').hasMatch(password),
+              ),
+              passwordRequirement(
+                'Include special character',
+                RegExp(
+                  r'''[\^$*.\[\]{}()?"!@#%&/\\,><':;|_~]''',
+                ).hasMatch(password),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -73,20 +152,14 @@ class _CustomerRegisterPageState extends State<CustomerRegisterPage> {
           children: [
             Text(
               'Register as Customer',
-              style: TextStyle(
-                fontSize: 23,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 30),
             Text(
               'Name',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight(550),
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight(550)),
             ),
-            SizedBox(height:10),
+            SizedBox(height: 10),
             Container(
               decoration: inset.BoxDecoration(
                 color: Color(0xFFF2F8F8),
@@ -104,9 +177,7 @@ class _CustomerRegisterPageState extends State<CustomerRegisterPage> {
                 controller: nameController,
                 decoration: InputDecoration(
                   hintText: 'John Doe',
-                  hintStyle: TextStyle(
-                    color: Colors.grey,
-                  ),
+                  hintStyle: TextStyle(color: Colors.grey),
                   filled: false,
                   fillColor: Color(0xFFFFFFFF),
                   border: OutlineInputBorder(
@@ -119,12 +190,9 @@ class _CustomerRegisterPageState extends State<CustomerRegisterPage> {
             SizedBox(height: 20),
             Text(
               'Email',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight(550),
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight(550)),
             ),
-            SizedBox(height:10),
+            SizedBox(height: 10),
             Container(
               decoration: inset.BoxDecoration(
                 color: Color(0xFFF2F8F8),
@@ -142,9 +210,7 @@ class _CustomerRegisterPageState extends State<CustomerRegisterPage> {
                 controller: emailController,
                 decoration: InputDecoration(
                   hintText: 'example@gmail.com',
-                  hintStyle: TextStyle(
-                    color: Colors.grey,
-                  ),
+                  hintStyle: TextStyle(color: Colors.grey),
                   filled: false,
                   fillColor: Color(0xFFFFFFFF),
                   border: OutlineInputBorder(
@@ -157,10 +223,14 @@ class _CustomerRegisterPageState extends State<CustomerRegisterPage> {
             SizedBox(height: 20),
             Text(
               'Phone Number',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight(550),
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight(550)),
+            ),
+            SizedBox(height: 10),
+            MalaysianPhoneField(controller: phoneController),
+            SizedBox(height: 20),
+            Text(
+              'Password',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight(550)),
             ),
             SizedBox(height: 10),
             Container(
@@ -177,51 +247,11 @@ class _CustomerRegisterPageState extends State<CustomerRegisterPage> {
                 ],
               ),
               child: TextField(
-                controller: phoneController,
-                decoration: InputDecoration(
-                  hintText: '+6012-1234567',
-                  hintStyle: TextStyle(
-                    color: Colors.grey,
-                  ),
-                  filled: false,
-                  fillColor: Color(0xFFFFFFFF),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(40),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(height:20),
-            Text(
-              'Password',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight(550),
-              ),
-            ),
-            SizedBox(height:10),
-            Container(
-              decoration: inset.BoxDecoration(
-                  color: Color(0xFFF2F8F8),
-                  borderRadius: BorderRadius.circular(40),
-                  boxShadow: [
-                    inset.BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.25),
-                      blurRadius: 2,
-                      offset: Offset(2, 2),
-                      inset: true,
-                    )
-                  ]
-              ),
-              child: TextField(
                 controller: passwordController,
                 obscureText: !isPasswordVisible,
                 decoration: InputDecoration(
                   hintText: 'password',
-                  hintStyle: TextStyle(
-                    color: Colors.grey,
-                  ),
+                  hintStyle: TextStyle(color: Colors.grey),
                   suffixIcon: IconButton(
                     icon: Icon(
                       isPasswordVisible
@@ -244,36 +274,33 @@ class _CustomerRegisterPageState extends State<CustomerRegisterPage> {
                 ),
               ),
             ),
-            SizedBox(height:20),
+            const SizedBox(height: 10),
+            buildPasswordRequirements(),
+            SizedBox(height: 20),
             Text(
               'Confirm Password',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight(550),
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight(550)),
             ),
-            SizedBox(height:10),
+            SizedBox(height: 10),
             Container(
               decoration: inset.BoxDecoration(
-                  color: Color(0xFFF2F8F8),
-                  borderRadius: BorderRadius.circular(40),
-                  boxShadow: [
-                    inset.BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.25),
-                      blurRadius: 2,
-                      offset: Offset(2, 2),
-                      inset: true,
-                    )
-                  ]
+                color: Color(0xFFF2F8F8),
+                borderRadius: BorderRadius.circular(40),
+                boxShadow: [
+                  inset.BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 2,
+                    offset: Offset(2, 2),
+                    inset: true,
+                  ),
+                ],
               ),
               child: TextField(
                 controller: confirmPasswordController,
                 obscureText: !isConfirmPasswordVisible,
                 decoration: InputDecoration(
                   hintText: 'confirm password',
-                  hintStyle: TextStyle(
-                    color: Colors.grey,
-                  ),
+                  hintStyle: TextStyle(color: Colors.grey),
                   suffixIcon: IconButton(
                     icon: Icon(
                       isConfirmPasswordVisible
@@ -296,14 +323,12 @@ class _CustomerRegisterPageState extends State<CustomerRegisterPage> {
                 ),
               ),
             ),
-            SizedBox(height:35),
+            SizedBox(height: 35),
             Center(
               child: RichText(
                 text: TextSpan(
                   text: "Already have an account? ",
-                  style: TextStyle(
-                    color: Colors.black,
-                  ),
+                  style: TextStyle(color: Colors.black),
                   children: [
                     TextSpan(
                       text: 'Login here',
@@ -312,14 +337,12 @@ class _CustomerRegisterPageState extends State<CustomerRegisterPage> {
                         decoration: TextDecoration.underline,
                       ),
                       recognizer: TapGestureRecognizer()
-                      ..onTap = () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (cotext) => LoginPage(),
-                          ),
-                        );
-                      },
+                        ..onTap = () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (cotext) => LoginPage()),
+                          );
+                        },
                     ),
                   ],
                 ),

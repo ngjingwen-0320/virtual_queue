@@ -1,3 +1,4 @@
+import '../utils/phone_number_utils.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -13,23 +14,26 @@ class RestaurantService {
         .collection('restaurant_brands')
         .doc(restaurantBrandId)
         .snapshots()
-        .map((doc){
-      final data = doc.data() ?? {};
-      return RestaurantBrandModel.fromMap(data);
-    });
+        .map((doc) {
+          final data = doc.data() ?? {};
+          return RestaurantBrandModel.fromMap(data);
+        });
   }
 
-  Stream<RestaurantModel> watchRestaurantBranch(String restaurantBrandId, String restaurantId) {
+  Stream<RestaurantModel> watchRestaurantBranch(
+    String restaurantBrandId,
+    String restaurantId,
+  ) {
     return _db
         .collection('restaurant_brands')
         .doc(restaurantBrandId)
         .collection('restaurants')
         .doc(restaurantId)
         .snapshots()
-        .map((doc){
-      final data = doc.data() ?? {};
-      return RestaurantModel.fromMap(data);
-    });
+        .map((doc) {
+          final data = doc.data() ?? {};
+          return RestaurantModel.fromMap(data);
+        });
   }
 
   Future<void> updateBrandProfile({
@@ -38,10 +42,7 @@ class RestaurantService {
     required String about,
     required String logoUrl,
   }) async {
-    final data = {
-      'cuisine': cuisine,
-      'about': about,
-    };
+    final data = {'cuisine': cuisine, 'about': about};
 
     if (logoUrl.isNotEmpty) {
       data['logo_url'] = logoUrl;
@@ -63,7 +64,7 @@ class RestaurantService {
     required String imageUrl,
   }) async {
     final data = {
-      'phone': phone,
+      'phone': PhoneNumberUtils.normalize(phone),
       'opening_hours': openingHours,
       'estimated_time': estimatedTime,
     };
@@ -100,9 +101,7 @@ class RestaurantService {
     request.fields['upload_preset'] = uploadPreset;
     request.fields['folder'] = 'restaurants';
 
-    request.files.add(
-      await http.MultipartFile.fromPath('file', file.path),
-    );
+    request.files.add(await http.MultipartFile.fromPath('file', file.path));
 
     final response = await request.send();
     final responseBody = await response.stream.bytesToString();
@@ -125,10 +124,8 @@ class RestaurantService {
         .doc(restaurantBrandId)
         .collection('restaurants')
         .doc(restaurantId)
-        .update({
-      'is_active': isActive,
-    });
+        .update({'is_active': isActive});
   }
-
 }
+
 // restaurant_brands/{brandId}/restaurants/{restaurantId}

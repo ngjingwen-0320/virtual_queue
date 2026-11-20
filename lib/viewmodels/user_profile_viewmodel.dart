@@ -1,8 +1,11 @@
+import '../utils/password_utils.dart';
+import '../utils/phone_number_utils.dart';
 // viewmodels/user_profile_viewmodel.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; 
-import '../models/user_profile.dart'; 
+import '../models/user_profile.dart';
+import 'package:virtual_queue/services/app_logger.dart';
 
 class UserProfileViewModel extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -32,9 +35,10 @@ class UserProfileViewModel extends ChangeNotifier {
     try {
       _isLoading = true;
       notifyListeners();
-
-      debugPrint('📥 [UserProfileVM] Fetching custom profile data for UID: ${currentUser.uid}');
-      
+      AppLogger.info(
+        'UserProfileVM',
+        '📥 Fetching custom profile data',
+      );
       final DocumentSnapshot doc = await _firestore
           .collection('users')
           .doc(currentUser.uid)
@@ -51,15 +55,24 @@ class UserProfileViewModel extends ChangeNotifier {
           currentUser.uid, 
           rawData,
         );
-        debugPrint('✅ [UserProfileVM] Full user profile map parsed! Data keys found: ${_allFieldsMap.keys.toList()}');
+        AppLogger.info(
+          'UserProfileVM',
+          '✅ Full user profile map parsed successfully',
+        );
       } else {
-        debugPrint('⚠️ [UserProfileVM] No custom profile document found in /users collection.');
+        AppLogger.warning(
+          'UserProfileVM',
+          '⚠️ No custom profile document found in /users collection.',
+        );
       }
 
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      debugPrint('❌ [UserProfileVM] Error pulling profile document: $e');
+      AppLogger.error(
+        'UserProfileVM',
+        '❌ Error pulling profile document',
+      );
       _isLoading = false;
       notifyListeners();
     }
@@ -70,11 +83,21 @@ class UserProfileViewModel extends ChangeNotifier {
     final User? currentUser = _auth.currentUser;
     if (currentUser == null) return false;
 
+    if (updatedDataPayload.containsKey('phone')) {
+      final normalized = PhoneNumberUtils.tryNormalize(
+        updatedDataPayload['phone']?.toString() ?? '',
+      );
+      if (normalized == null) return false;
+      updatedDataPayload = {...updatedDataPayload, 'phone': normalized};
+    }
     try {
       _isLoading = true;
       notifyListeners();
 
-      debugPrint('📤 [UserProfileVM] Saving customer payload data to Firestore: $updatedDataPayload');
+      AppLogger.info(
+        'UserProfileVM',
+        '📤 Saving customer profile changes to Firestore',
+      );
 
       // 1. Update document in Firestore using merge:true to avoid clearing unselected background data values
       await _firestore
@@ -92,7 +115,10 @@ class UserProfileViewModel extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      debugPrint('❌ [UserProfileVM] Failed to save edited customer details: $e');
+      AppLogger.error(
+        'UserProfileVM',
+        '❌ Failed to save edited customer details',
+      );
       _isLoading = false;
       notifyListeners();
       return false;
@@ -100,10 +126,14 @@ class UserProfileViewModel extends ChangeNotifier {
   }
   
   // --- UI Getters ---
-  String get userEmail => _cachedProfile?.email ?? (_auth.currentUser?.email ?? 'guest.user@example.com');
+  String get userEmail =>
+      _cachedProfile?.email ??
+      (_auth.currentUser?.email ?? 'guest.user@example.com');
   String get userDisplayName => _cachedProfile?.name ?? 'Queue Guest';
-  String get userPhone => _allFieldsMap['phone'] ?? ''; // Safely exposes phone field out of raw dataset maps
-  
+  String get userPhone => PhoneNumberUtils.display(
+    _allFieldsMap['phone']?.toString() ?? '',
+  ); // Safely exposes phone field out of raw dataset maps
+
   String get userJoinedDate {
     final DateTime? creationTime = _auth.currentUser?.metadata.creationTime;
     if (creationTime != null) {
@@ -118,6 +148,8 @@ class UserProfileViewModel extends ChangeNotifier {
     required String currentPassword,
     required String newPassword,
   }) async {
+    final passwordError = PasswordUtils.validate(newPassword);
+    if (passwordError != null) return passwordError;
     final User? currentUser = _auth.currentUser;
     if (currentUser == null || currentUser.email == null) {
       return 'Session expired. Please log out and sign in again.';
@@ -137,13 +169,18 @@ class UserProfileViewModel extends ChangeNotifier {
       // 2. Attempt the password update operation
       await currentUser.updatePassword(newPassword);
 
+      // Log successful password changes without exposing sensitive user information.
+      AppLogger.securityEvent(
+        '🔐 User password changed successfully',
+      );
+
       _isLoading = false;
       notifyListeners();
       return null; // Return null to indicate complete success
     } on FirebaseAuthException catch (authError) {
       _isLoading = false;
       notifyListeners();
-      
+
       // Explicit error mapping categorization rules
       switch (authError.code) {
         case 'wrong-password':
@@ -157,7 +194,8 @@ class UserProfileViewModel extends ChangeNotifier {
         case 'network-request-failed':
           return 'Network error. Please verify your internet connection connection status.';
         default:
-          return authError.message ?? 'An unexpected authentication error occurred.';
+          return authError.message ??
+              'An unexpected authentication error occurred.';
       }
     } catch (e) {
       _isLoading = false;
@@ -172,16 +210,23 @@ class UserProfileViewModel extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      debugPrint('🚪 [UserProfileVM] Erasing authenticated session state token...');
       await _auth.signOut();
 
-      _cachedProfile = null; 
+      AppLogger.info(
+        'UserProfileVM',
+        '🚪 Erasing authenticated session state token...',
+      );
+
+      _cachedProfile = null;
       _allFieldsMap.clear();
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
-      debugPrint('❌ [UserProfileVM] Failed to logout session: $e');
+      AppLogger.error(
+        'UserProfileVM',
+        '❌ Failed to logout session',
+      );
       _isLoading = false;
       notifyListeners();
       return false;

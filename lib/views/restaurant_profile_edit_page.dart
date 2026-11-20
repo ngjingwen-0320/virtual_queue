@@ -1,3 +1,5 @@
+import '../widgets/malaysian_phone_field.dart';
+import '../utils/phone_number_utils.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_inset_shadow/flutter_inset_shadow.dart' as inset;
@@ -87,7 +89,7 @@ class _RestaurantProfileEditPageState extends State<RestaurantProfileEditPage> {
     cuisineController.text = brand.cuisine;
     aboutController.text = brand.about;
     addressController.text = restaurant.address;
-    phoneController.text = restaurant.phone;
+    phoneController.text = PhoneNumberUtils.nationalDigits(restaurant.phone);
     estimatedTimeController.text = restaurant.estimatedTime.toString();
 
     for (final day in days) {
@@ -145,6 +147,11 @@ class _RestaurantProfileEditPageState extends State<RestaurantProfileEditPage> {
       return false;
     }
 
+    final phoneError = PhoneNumberUtils.validate(phoneController.text);
+    if (phoneError != null) {
+      showMessage(phoneError);
+      return false;
+    }
     if (brand.logoUrl.isEmpty && logoFile == null) {
       showMessage('Please upload restaurant logo');
       return false;
@@ -172,9 +179,9 @@ class _RestaurantProfileEditPageState extends State<RestaurantProfileEditPage> {
   }
 
   void showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> saveChanges(
@@ -288,19 +295,14 @@ class _RestaurantProfileEditPageState extends State<RestaurantProfileEditPage> {
               icon: Icons.image,
               borderRadius: BorderRadius.zero,
             ),
-            Container(
-              color: Colors.black.withValues(alpha: 0.18),
-            ),
+            Container(color: Colors.black.withValues(alpha: 0.18)),
             Positioned(
               right: 20,
               bottom: 34,
               child: CircleAvatar(
                 radius: 24,
                 backgroundColor: Colors.white,
-                child: Icon(
-                  Icons.camera_alt,
-                  color: Color(0xFF006670),
-                ),
+                child: Icon(Icons.camera_alt, color: Color(0xFF006670)),
               ),
             ),
           ],
@@ -377,10 +379,7 @@ class _RestaurantProfileEditPageState extends State<RestaurantProfileEditPage> {
                     const SizedBox(height: 4),
                     const Text(
                       'Restaurant details',
-                      style: TextStyle(
-                        color: Color(0xFF64748B),
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
                     ),
                   ],
                 ),
@@ -416,10 +415,7 @@ class _RestaurantProfileEditPageState extends State<RestaurantProfileEditPage> {
         children: [
           Text(
             'Branch: ${restaurant.branchName}',
-            style: const TextStyle(
-              fontSize: 21,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 22),
           _buildLabel('Address'),
@@ -431,11 +427,7 @@ class _RestaurantProfileEditPageState extends State<RestaurantProfileEditPage> {
           ),
           const SizedBox(height: 18),
           _buildLabel('Phone'),
-          _buildTextInput(
-            controller: phoneController,
-            hintText: '+04-10263288',
-            keyboardType: TextInputType.phone,
-          ),
+          MalaysianPhoneField(controller: phoneController),
           const SizedBox(height: 18),
           _buildLabel('Estimated time per table'),
           _buildTextInput(
@@ -495,10 +487,7 @@ class _RestaurantProfileEditPageState extends State<RestaurantProfileEditPage> {
               ),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 8),
-                child: Text(
-                  '-',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+                child: Text('-', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
               Expanded(
                 child: _buildTimeInput(
@@ -514,7 +503,10 @@ class _RestaurantProfileEditPageState extends State<RestaurantProfileEditPage> {
     );
   }
 
-  Widget _buildSaveButton(RestaurantBrandModel brand, RestaurantModel restaurant) {
+  Widget _buildSaveButton(
+    RestaurantBrandModel brand,
+    RestaurantModel restaurant,
+  ) {
     return SizedBox(
       width: double.infinity,
       height: 54,
@@ -529,10 +521,7 @@ class _RestaurantProfileEditPageState extends State<RestaurantProfileEditPage> {
         onPressed: () => saveChanges(brand, restaurant),
         child: const Text(
           'Save Changes',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 17,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
         ),
       ),
     );
@@ -543,10 +532,7 @@ class _RestaurantProfileEditPageState extends State<RestaurantProfileEditPage> {
       padding: const EdgeInsets.only(bottom: 9),
       child: Text(
         text,
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 15,
-        ),
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
       ),
     );
   }
@@ -619,10 +605,7 @@ class _RestaurantProfileEditPageState extends State<RestaurantProfileEditPage> {
     if (localFile != null) {
       return ClipRRect(
         borderRadius: borderRadius,
-        child: Image.file(
-          localFile,
-          fit: BoxFit.cover,
-        ),
+        child: Image.file(localFile, fit: BoxFit.cover),
       );
     }
 
@@ -646,11 +629,7 @@ class _RestaurantProfileEditPageState extends State<RestaurantProfileEditPage> {
     return Container(
       color: Colors.white,
       child: Center(
-        child: Icon(
-          icon,
-          color: const Color(0xFF006670),
-          size: 40,
-        ),
+        child: Icon(icon, color: const Color(0xFF006670), size: 40),
       ),
     );
   }

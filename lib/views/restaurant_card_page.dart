@@ -6,6 +6,7 @@ import '../models/restaurant_detail_state.dart';
 import 'queue_status_page.dart';
 import '../services/queue_service.dart';
 import 'reservation_booking_page.dart';
+import 'package:virtual_queue/services/app_logger.dart';
 
 class RestaurantCardPage extends StatefulWidget {
   final String brandId;       
@@ -41,12 +42,19 @@ class _RestaurantCardPageState extends State<RestaurantCardPage> {
   // 🎯 Fetch the real authenticated User ID string from the active session
   String? getRealUserId() {
     final User? user = FirebaseAuth.instance.currentUser;
-    
+    // ℹ️ Confirm an active user session without logging the Firebase UID.
     if (user != null) {
-      debugPrint('ℹ️ [Auth Session] Active User verified: ${user.uid}');
+      AppLogger.info(
+        'AuthSession',
+        'ℹ️ Active user verified',
+      );
       return user.uid; // 🚀 This is your real, distinct Firestore document key string!
     } else {
-      debugPrint('⚠️ [Auth Warning] No user is logged in right now.');
+      // ⚠️ Record when a user session is unavailable.
+      AppLogger.warning(
+        'AuthSession',
+        '⚠️ No user is logged in right now.',
+      );
       return null;
     }
   }
@@ -82,8 +90,12 @@ class _RestaurantCardPageState extends State<RestaurantCardPage> {
     }
 
     setState(() => _isLoading = true);
-    debugPrint('🚀 [Queue System] Attempting to join line...');
-    
+    // 🚀 Record the start of a queue joining request.
+    AppLogger.info(
+      'QueueSystem',
+      '🚀 Attempting to join line...',
+    );
+
     try {
       int? assignedNumber = await _viewModel.joinQueueLine(
         brandId: widget.brandId,
@@ -95,8 +107,12 @@ class _RestaurantCardPageState extends State<RestaurantCardPage> {
       setState(() => _isLoading = false);
 
       if (assignedNumber != null && mounted) {
-        debugPrint('🎟️ [Queue Success] Ticket #$assignedNumber secured. Sending to Home state...');
-        
+        // 🎟️ Record successful queue joining without exposing the ticket number.
+        AppLogger.info(
+          'QueueSuccess',
+          '🎟️ Queue ticket secured successfully. Sending to Home state...',
+        );
+
         // Close the card page and send the assigned number back to the Home View
         Navigator.pop(context, assignedNumber);
       } else {
@@ -297,7 +313,11 @@ class _RestaurantCardPageState extends State<RestaurantCardPage> {
 
                                       // 🚀 STEP 2: Execute your Firestore transaction mutations securely
                                       if (_isBookmarked) {
-                                        debugPrint('📌 Saving to profile path: users/$realUserId/bookmarks/${widget.restaurantId}');
+                                        // 📌 Record bookmark-saving requests without exposing Firestore paths.
+                                        AppLogger.info(
+                                          'RestaurantCardPage',
+                                          '📌 Saving restaurant to bookmarks',
+                                        );
                                         await _viewModel.saveToBookmarks(
                                           userId: realUserId,
                                           restaurantId: widget.restaurantId,
@@ -333,7 +353,11 @@ class _RestaurantCardPageState extends State<RestaurantCardPage> {
                                           );
                                         }
                                       } else {
-                                        debugPrint('🗑️ Removing from profile path: users/$realUserId/bookmarks/${widget.restaurantId}');
+                                        // 🗑️ Record bookmark-removal requests without exposing user identifiers.
+                                        AppLogger.info(
+                                          'RestaurantCardPage',
+                                          '🗑️ Removing restaurant from bookmarks',
+                                        );
                                         await _viewModel.removeFromBookmarks(
                                           userId: realUserId,
                                           restaurantId: widget.restaurantId,

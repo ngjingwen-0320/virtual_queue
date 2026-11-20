@@ -1,3 +1,4 @@
+import '../utils/phone_number_utils.dart';
 import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,7 +7,6 @@ import 'otp_email_service.dart';
 
 // Talk to Firebase
 class AuthService {
-
   // used for login
   final FirebaseAuth _auth = FirebaseAuth.instance;
   // used for read Firestore data
@@ -19,7 +19,10 @@ class AuthService {
     return (100000 + random.nextInt(900000)).toString();
   }
 
-  Future<Map<String, String>> sendLoginOtp(String email, String password) async {
+  Future<Map<String, String>> sendLoginOtp(
+    String email,
+    String password,
+  ) async {
     final result = await _auth.signInWithEmailAndPassword(
       email: email.trim(),
       password: password,
@@ -75,10 +78,7 @@ class AuthService {
       );
     }
 
-    return {
-      'uid': updatedUser.uid,
-      'email': updatedUser.email ?? email,
-    };
+    return {'uid': updatedUser.uid, 'email': updatedUser.email ?? email};
   }
 
   Future<UserProfile?> verifyOtpAndLogin({
@@ -122,7 +122,8 @@ class AuthService {
         );
       }
 
-      if (expiresAtTimestamp == null || DateTime.now().isAfter(expiresAtTimestamp.toDate())) {
+      if (expiresAtTimestamp == null ||
+          DateTime.now().isAfter(expiresAtTimestamp.toDate())) {
         await otpDocRef.delete();
         await _auth.signOut();
         throw FirebaseAuthException(
@@ -193,9 +194,10 @@ class AuthService {
     required String phone,
     required String password,
   }) async {
+    final normalizedPhone = PhoneNumberUtils.normalize(phone);
     final result = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password
+      email: email,
+      password: password,
     );
 
     final user = result.user;
@@ -207,7 +209,7 @@ class AuthService {
       'created_at': FieldValue.serverTimestamp(),
       'email': email,
       'name': name,
-      'phone': phone,
+      'phone': normalizedPhone,
       'role': 'customer',
     });
 
@@ -304,6 +306,7 @@ class AuthService {
     required String password,
     required List<Map<String, String>> branches,
   }) async {
+    final normalizedPhone = PhoneNumberUtils.normalize(ownerPhone);
     final result = await _auth.createUserWithEmailAndPassword(
       email: ownerEmail,
       password: password,
@@ -331,7 +334,7 @@ class AuthService {
       'created_at': FieldValue.serverTimestamp(),
       'email': ownerEmail,
       'name': ownerName,
-      'owner_phone': ownerPhone,
+      'owner_phone': normalizedPhone,
       'role': 'restaurant',
       'brand_id': brandRef.id,
       'restaurant_ids': restaurantIds,
@@ -360,7 +363,7 @@ class AuthService {
         'address': branch['address'],
         'brand_id': brandRef.id,
         'owner_id': user.uid,
-        'phone': ownerPhone,
+        'phone': normalizedPhone,
         'estimated_time': 0,
         'is_active': true,
         'opening_hours': {},
@@ -378,9 +381,7 @@ class AuthService {
   }
 
   Future<void> sendPasswordResetEmail(String email) async {
-    await _auth.sendPasswordResetEmail(
-      email: email.trim(),
-    );
+    await _auth.sendPasswordResetEmail(email: email.trim());
   }
 
   // Future<void> resendVerificationEmail() async {
@@ -406,5 +407,4 @@ class AuthService {
   Future<void> logout() async {
     await _auth.signOut();
   }
-
 }

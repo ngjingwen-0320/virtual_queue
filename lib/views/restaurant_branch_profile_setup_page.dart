@@ -1,3 +1,5 @@
+import '../widgets/malaysian_phone_field.dart';
+import '../utils/phone_number_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:virtual_queue/models/restaurant_model.dart';
 import 'package:virtual_queue/viewmodels/restaurant_profile_setup_viewmodel.dart';
@@ -20,8 +22,8 @@ class RestaurantBranchProfileSetupPage extends StatefulWidget {
       _RestaurantBranchProfileSetupPageState();
 }
 
-class _RestaurantBranchProfileSetupPageState extends State<RestaurantBranchProfileSetupPage>{
-
+class _RestaurantBranchProfileSetupPageState
+    extends State<RestaurantBranchProfileSetupPage> {
   final viewmodel = RestaurantProfileSetupViewModel();
 
   final phoneController = TextEditingController();
@@ -55,6 +57,51 @@ class _RestaurantBranchProfileSetupPageState extends State<RestaurantBranchProfi
     }
   }
 
+  Future<void> selectTime(String day, bool isOpeningTime) async {
+    final controller = isOpeningTime
+        ? openControllers[day]!
+        : closeControllers[day]!;
+
+    final parts = controller.text.split(':');
+
+    TimeOfDay initialTime = TimeOfDay.now();
+
+    if (parts.length == 2) {
+      final hour = int.tryParse(parts[0]);
+      final minute = int.tryParse(parts[1]);
+
+      if (hour != null &&
+          minute != null &&
+          hour >= 0 &&
+          hour <= 23 &&
+          minute >= 0 &&
+          minute <= 59) {
+        initialTime = TimeOfDay(hour: hour, minute: minute);
+      }
+    }
+
+    final selectedTime = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      initialEntryMode: TimePickerEntryMode.dial,
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+          child: child!,
+        );
+      },
+    );
+
+    if (selectedTime == null || !mounted) return;
+
+    final hour = selectedTime.hour.toString().padLeft(2, '0');
+    final minute = selectedTime.minute.toString().padLeft(2, '0');
+
+    setState(() {
+      controller.text = '$hour:$minute';
+    });
+  }
+
   Map<String, dynamic> buildOpeningHoursMap() {
     final openingHours = <String, dynamic>{};
     for (final day in days) {
@@ -69,9 +116,7 @@ class _RestaurantBranchProfileSetupPageState extends State<RestaurantBranchProfi
 
   // opens phone gallery and stores the selected image locally
   Future<void> pickRestaurantImage() async {
-    final picked = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-    );
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
 
     if (picked == null) return;
 
@@ -88,10 +133,11 @@ class _RestaurantBranchProfileSetupPageState extends State<RestaurantBranchProfi
       return false;
     }
 
-    if (phoneController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter phone number')),
-      );
+    final phoneError = PhoneNumberUtils.validate(phoneController.text);
+    if (phoneError != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(phoneError)));
       return false;
     }
 
@@ -112,9 +158,7 @@ class _RestaurantBranchProfileSetupPageState extends State<RestaurantBranchProfi
 
       if (open.isEmpty || close.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Please enter opening hours for $day'),
-          ),
+          SnackBar(content: Text('Please enter opening hours for $day')),
         );
         return false;
       }
@@ -141,13 +185,11 @@ class _RestaurantBranchProfileSetupPageState extends State<RestaurantBranchProfi
   }
 
   @override
-  Widget build (BuildContext context) {
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Color(0xFFF6FAFB),
       appBar: AppBar(
-        title: Text(
-          'Branch Setup'
-        ),
+        title: Text('Branch Setup'),
         backgroundColor: Color(0xFF115E59),
         foregroundColor: Colors.white,
       ),
@@ -160,11 +202,11 @@ class _RestaurantBranchProfileSetupPageState extends State<RestaurantBranchProfi
                 widget.restaurantBrandId,
                 widget.restaurantId,
               ),
-              builder: (context, snapshot){
+              builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return Text('Error: ${snapshot.error}');
                 }
-                if(!snapshot.hasData) {
+                if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final restaurant = snapshot.data!;
@@ -191,7 +233,7 @@ class _RestaurantBranchProfileSetupPageState extends State<RestaurantBranchProfi
                     Text(restaurant.address),
 
                     SizedBox(height: 20),
-                    
+
                     Text(
                       'Restaurant Image',
                       style: TextStyle(
@@ -211,34 +253,34 @@ class _RestaurantBranchProfileSetupPageState extends State<RestaurantBranchProfi
                           border: Border.all(
                             color: Color(0xFF115E59),
                             width: 1,
-                          )
-                        ),
-                        child: restaurantImageFile == null
-                        ? Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.add_photo_alternate_outlined,
-                                color: Color(0xFF115E59),
-                                size: 50,
-                              ),
-                              SizedBox(height: 10),
-                              Text(
-                                'Upload restaurant image',
-                                style: TextStyle(
-                                  color: Color(0xFF115E59),
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          )
-                        : ClipRRect(
-                          borderRadius: BorderRadius.circular(20),
-                          child: Image.file(
-                            restaurantImageFile!,
-                            fit: BoxFit.cover,
                           ),
                         ),
+                        child: restaurantImageFile == null
+                            ? Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.add_photo_alternate_outlined,
+                                    color: Color(0xFF115E59),
+                                    size: 50,
+                                  ),
+                                  SizedBox(height: 10),
+                                  Text(
+                                    'Upload restaurant image',
+                                    style: TextStyle(
+                                      color: Color(0xFF115E59),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(20),
+                                child: Image.file(
+                                  restaurantImageFile!,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
                       ),
                     ),
 
@@ -252,35 +294,7 @@ class _RestaurantBranchProfileSetupPageState extends State<RestaurantBranchProfi
                       ),
                     ),
                     SizedBox(height: 10),
-                    Container(
-                      decoration: inset.BoxDecoration(
-                        color: Color(0xFFF2F8F8),
-                        borderRadius: BorderRadius.circular(40),
-                        boxShadow: [
-                          inset.BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.25),
-                            blurRadius: 2,
-                            offset: Offset(2, 2),
-                            inset: true,
-                          ),
-                        ],
-                      ),
-                      child: TextField(
-                        controller: phoneController,
-                        decoration: InputDecoration(
-                          hintText: '+6012-1234567',
-                          hintStyle: TextStyle(
-                            color: Colors.grey,
-                          ),
-                          filled: false,
-                          fillColor: Color(0xFFFFFFFF),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(40),
-                            borderSide: BorderSide.none,
-                          ),
-                        ),
-                      ),
-                    ),
+                    MalaysianPhoneField(controller: phoneController),
 
                     SizedBox(height: 20),
 
@@ -325,11 +339,16 @@ class _RestaurantBranchProfileSetupPageState extends State<RestaurantBranchProfi
                               child: TextField(
                                 controller: openControllers[day],
                                 enabled: isOpen,
+                                readOnly: true,
+                                onTap: () => selectTime(day, true),
                                 decoration: InputDecoration(
                                   labelText: 'Open Time',
+                                  suffixIcon: const Icon(Icons.access_time),
                                   border: const OutlineInputBorder(),
                                   filled: true,
-                                  fillColor: isOpen ? Colors.white : const Color(0xFFE5E7EB),
+                                  fillColor: isOpen
+                                      ? Colors.white
+                                      : const Color(0xFFE5E7EB),
                                 ),
                               ),
                             ),
@@ -340,11 +359,16 @@ class _RestaurantBranchProfileSetupPageState extends State<RestaurantBranchProfi
                               child: TextField(
                                 controller: closeControllers[day],
                                 enabled: isOpen,
+                                readOnly: true,
+                                onTap: () => selectTime(day, false),
                                 decoration: InputDecoration(
                                   labelText: 'Close Time',
+                                  suffixIcon: const Icon(Icons.access_time),
                                   border: const OutlineInputBorder(),
                                   filled: true,
-                                  fillColor: isOpen ? Colors.white : const Color(0xFFE5E7EB),
+                                  fillColor: isOpen
+                                      ? Colors.white
+                                      : const Color(0xFFE5E7EB),
                                 ),
                               ),
                             ),
@@ -379,9 +403,7 @@ class _RestaurantBranchProfileSetupPageState extends State<RestaurantBranchProfi
                         controller: estimatedTimeController,
                         decoration: InputDecoration(
                           hintText: 'e.g. 10',
-                          hintStyle: TextStyle(
-                            color: Colors.grey,
-                          ),
+                          hintStyle: TextStyle(color: Colors.grey),
                           filled: false,
                           fillColor: Color(0xFFFFFFFF),
                           border: OutlineInputBorder(
@@ -420,36 +442,39 @@ class _RestaurantBranchProfileSetupPageState extends State<RestaurantBranchProfi
                               imageFile: restaurantImageFile,
                               phone: phoneController.text.trim(),
                               openingHours: openingHours,
-                              estimatedTime: int.tryParse(
-                                estimatedTimeController.text.trim(),
-                              ) ?? 0,
+                              estimatedTime:
+                                  int.tryParse(
+                                    estimatedTimeController.text.trim(),
+                                  ) ??
+                                  0,
                             );
 
                             if (!context.mounted) return;
 
-                            if(success){
+                            if (success) {
                               Navigator.pop(context);
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text(viewmodel.errorMessage ?? 'Failed to save branch'),
+                                  content: Text(
+                                    viewmodel.errorMessage ??
+                                        'Failed to save branch',
+                                  ),
                                 ),
                               );
                             }
                           },
                           child: Text(
                             'Save',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
                       ),
                     ),
                   ],
                 );
-              }
-            )
+              },
+            ),
           ],
         ),
       ),
